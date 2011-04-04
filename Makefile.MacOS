@@ -1,0 +1,8 @@
+CC=gcc
+CFLAGS=-Wall -fast
+LDFLAGS=-framework OpenGL -framework GLUT -framework CoreFoundation
+
+perftest: perftest.o perftest_d3d9.o perftest_ogl.c
+
+clean: 
+	rm -f perftest *.o

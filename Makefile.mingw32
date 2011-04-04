@@ -1,0 +1,13 @@
+CC=i386-mingw32-gcc
+CFLAGS=-Wall -O3 -Iinclude/win32/freeglut -Iinclude/win32
+LDFLAGS= -lopengl32 -Llib/win32/freeglut -lfreeglut -lwinmm -lgdi32
+LINK_TARGET = perftest.exe
+OBJS = perftest.o \
+       perftest_d3d9.o \
+       perftest_ogl.o
+
+$(LINK_TARGET) : $(OBJS)
+	$(CC) $(OBJS) $(LDFLAGS) -o $(LINK_TARGET)
+
+clean: 
+	rm -f perftest.exe *.o

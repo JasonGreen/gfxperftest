@@ -35,7 +35,7 @@ This enables the multi-threaded GL engine, which should provide a framerate
 boost in some cases.  This is not toggled by default in the run_tests.sh
 script, so to enable this, type:
 
-  ./run_tests.sh -use_multithreaded_gl > output_file.csv
+  ./run_tests.sh -use_multithreaded_gl=1 > output_file.csv
 
 
 Compiling the source code

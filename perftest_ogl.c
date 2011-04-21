@@ -22,10 +22,14 @@ typedef void (APIENTRY * PFNGLBINDBUFFERARBPROC) (GLenum target, GLuint buffer);
 typedef void (APIENTRY * PFNGLGENBUFFERSARBPROC) (GLsizei n, GLuint *buffers);
 typedef void (APIENTRY * PFNGLBUFFERSUBDATAARBPROC) (GLenum target, GLintptrARB offset, GLsizeiptrARB size, const GLvoid *data);
 typedef void (APIENTRY * PFNGLBUFFERDATAARBPROC) (GLenum target, GLsizeiptrARB size, const GLvoid *data, GLenum usage);
+typedef void * (APIENTRY * PFNGLMAPBUFFERARBPROC) (GLenum target, GLenum access);
+typedef GLboolean (APIENTRY * PFNGLUNMAPBUFFERARBPROC) (GLenum target);
 PFNGLBINDBUFFERARBPROC p_glBindBuffer = NULL;
 PFNGLGENBUFFERSARBPROC p_glGenBuffers = NULL;
 PFNGLBUFFERSUBDATAARBPROC p_glBufferSubData = NULL;
 PFNGLBUFFERDATAARBPROC p_glBufferData = NULL;
+PFNGLMAPBUFFERARBPROC p_glMapBuffer = NULL;
+PFNGLUNMAPBUFFERARBPROC p_glUnmapBuffer = NULL;
 
 /* EXT_bindable_uniform */
 typedef void (APIENTRY * PFNGLUNIFORMBUFFEREXTPROC) (GLuint program, GLint location, GLuint buffer);
@@ -671,11 +675,65 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
         if (gUseBindableUniform) {
             /* TODO: Add other update mechanisms here for profiling:
              *  - glUniform4fv() (would need to rework the shader a bit)
-             *  - glBufferSubData()
              *  - APPLE_flush_buffer_range
              *  - ARB_flush_buffer_range
+             *  - Ring buffer approach using multiple buffer objects
              */
-            p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
+            switch (gBindableUpdateMethod) {
+
+                case BINDABLE_UPDATE_GLUNIFORM_WITH_DISCARD:
+                    p_glBufferData(GL_UNIFORM_BUFFER_EXT,
+                                   sizeof(gModelViewMatrixf),
+                                   NULL, GL_STATIC_DRAW);
+                    /* Fall-through */
+                case BINDABLE_UPDATE_GLUNIFORM:
+                    /* Just use the same glUniformMatrix command to update
+                     * shader uniforms */
+                    p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
+                    break;
+
+                case BINDABLE_UPDATE_BUFFERDATA:
+                    /* Replace uniform buffer contents with glBufferData */
+                    p_glBufferData(GL_UNIFORM_BUFFER_EXT,
+                                   sizeof(gModelViewMatrixf),
+                                   params, GL_STATIC_DRAW);
+                    break;
+
+                case BINDABLE_UPDATE_BUFFERSUBDATA_WITH_DISCARD:
+                    p_glBufferData(GL_UNIFORM_BUFFER_EXT,
+                                   sizeof(gModelViewMatrixf),
+                                   NULL, GL_STATIC_DRAW);
+                    /* Fall-through */
+                case BINDABLE_UPDATE_BUFFERSUBDATA:
+                    /* Update uniform buffer contents with glBufferSubData */
+                    p_glBufferSubData(GL_UNIFORM_BUFFER_EXT,
+                                      0, sizeof(gModelViewMatrixf), params);
+                    break;
+
+                case BINDABLE_UPDATE_MAPBUFFER_WITH_DISCARD:
+                    p_glBufferData(GL_UNIFORM_BUFFER_EXT,
+                                   sizeof(gModelViewMatrixf),
+                                   NULL, GL_STATIC_DRAW);
+                    /* Fall-through */
+                case BINDABLE_UPDATE_MAPBUFFER:
+                {
+                    /* Update uniform buffer contents with glMapBuffer */
+                    void * ptr = p_glMapBuffer(GL_UNIFORM_BUFFER_EXT,
+                                               GL_WRITE_ONLY);
+                    if (ptr) {
+                        memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        p_glUnmapBuffer(GL_UNIFORM_BUFFER_EXT);
+                    } else
+                        fprintf(stderr, "ERROR: Unable to map buffer!\n");
+                    break;
+                }
+
+                default:
+                    fprintf(stderr, "ERROR: Unknown buffer update method: %d\n",
+                            gBindableUpdateMethod);
+                    break;
+            }
+
         } else {
             p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
         }
@@ -993,6 +1051,8 @@ static void checkGLExtensions()
         GET_PROC_ADDRESS(p_glGenBuffers, glGenBuffersARB);
         GET_PROC_ADDRESS(p_glBufferSubData, glBufferSubDataARB);
         GET_PROC_ADDRESS(p_glBufferData, glBufferDataARB);
+        GET_PROC_ADDRESS(p_glMapBuffer, glMapBufferARB);
+        GET_PROC_ADDRESS(p_glUnmapBuffer, glUnmapBufferARB);
 
     /* TODO: Grab core 2.0 pointers if available w/o extension */
     } else {

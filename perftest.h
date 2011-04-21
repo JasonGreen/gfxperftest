@@ -63,11 +63,24 @@ extern GLuint gBufferWidth;
 extern GLuint gBufferHeight;
 extern float gRotation;
 
+/* Bindable uniform update methods */
+enum {
+    BINDABLE_UPDATE_GLUNIFORM = 0,
+    BINDABLE_UPDATE_GLUNIFORM_WITH_DISCARD = 1,
+    BINDABLE_UPDATE_BUFFERDATA = 2,
+    BINDABLE_UPDATE_BUFFERSUBDATA = 3,
+    BINDABLE_UPDATE_BUFFERSUBDATA_WITH_DISCARD = 4,
+    BINDABLE_UPDATE_MAPBUFFER = 5,
+    BINDABLE_UPDATE_MAPBUFFER_WITH_DISCARD = 6,
+    BINDABLE_UPDATE_NUM_METHODS
+};
+
 /* config options */
 extern int gIgnoreKeyboard;
 extern int gUseGLSL;
 extern int gHaveBindableUniform;
 extern int gUseBindableUniform;
+extern int gBindableUpdateMethod;
 extern int gHaveVAO;
 extern int gUseVAO;
 extern int gResetVertexPointers;

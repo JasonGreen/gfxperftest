@@ -66,6 +66,8 @@ extern float gRotation;
 /* config options */
 extern int gIgnoreKeyboard;
 extern int gUseGLSL;
+extern int gHaveBindableUniform;
+extern int gUseBindableUniform;
 extern int gHaveVAO;
 extern int gUseVAO;
 extern int gResetVertexPointers;

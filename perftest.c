@@ -24,6 +24,8 @@ int     gLastFPSDrawFrameCount;
 int     gFPSFramesToSkip = 100; /* Skip the first 100 frames when averaging FPS (TODO: make configurable?) */
 int     gIgnoreKeyboard = 0;
 int     gUseGLSL = 0; /* Default to ARB_vp/fp */
+int     gUseBindableUniform = 0;
+int     gHaveBindableUniform = 0;
 int     gUseVAO = 0;
 int     gResetVertexPointers = 0;
 int     gResetConstants = 0;
@@ -311,6 +313,7 @@ static void displayHelp()
     printf("  -use_d3d9=[0,1]              1 = Use D3D9 engine (Windows only)\n");
     printf("  -use_multithreaded_gl=[0,1]  1 = Use MultiThreaded GL (Mac only) (M)\n");
     printf("  -use_glsl=[0,1]              1 = Use GLSL, 0 = Use ARB_vp/fp (G)\n");
+    printf("  -use_bindable_uniform=[0,1]  1 = Use EXT_bindable_uniform with GLSL (B)\n");
     printf("  -use_vao=[0,1]               1 = Use VAO, 0 = Use general vertex attrib calls (V)\n");
     printf("  -reset_constants=[0,1]       1 = Reset constants before each draw call (C)\n");
     printf("  -reset_vertex_pointers=[0,1] 1 = Reset vertex pointers before each draw call (P)\n");
@@ -351,6 +354,11 @@ int handleKeyPress(unsigned char key)
 
     /* Some commands are only handled when using OpenGL */
     switch(key) {
+        case 'b':
+        case 'B':
+            if (!gUseD3D9 && gHaveBindableUniform && gUseGLSL)
+                TOGGLE_OPTION(gUseBindableUniform);
+            break;
         case 'c':
         case 'C':
             TOGGLE_OPTION(gResetConstants)
@@ -358,6 +366,7 @@ int handleKeyPress(unsigned char key)
         case 'G':
             if (!gUseD3D9)
                 TOGGLE_OPTION(gUseGLSL)
+            break;
         case 'm':
         case 'M':
 #ifdef __APPLE__
@@ -409,6 +418,7 @@ static void parseCommandLineOptions(int argc, char** argv)
         parseIntArgument(argv[i], "use_d3d9", &gUseD3D9);
         parseIntArgument(argv[i], "use_multithreaded_gl", &gUseMultiThreadedGL);
         parseIntArgument(argv[i], "use_glsl", &gUseGLSL);
+        parseIntArgument(argv[i], "use_bindable_uniform", &gUseBindableUniform);
         parseIntArgument(argv[i], "use_vao", &gUseVAO);
         parseIntArgument(argv[i], "reset_constants", &gResetConstants);
         parseIntArgument(argv[i], "reset_vertex_pointers", &gResetVertexPointers);

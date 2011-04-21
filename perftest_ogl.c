@@ -27,6 +27,22 @@ PFNGLGENBUFFERSARBPROC p_glGenBuffers = NULL;
 PFNGLBUFFERSUBDATAARBPROC p_glBufferSubData = NULL;
 PFNGLBUFFERDATAARBPROC p_glBufferData = NULL;
 
+/* EXT_bindable_uniform */
+typedef void (APIENTRY * PFNGLUNIFORMBUFFEREXTPROC) (GLuint program, GLint location, GLuint buffer);
+typedef GLint (APIENTRY * PFNGLGETUNIFORMBUFFERSIZEEXTPROC) (GLuint program, GLint location);
+typedef GLint * (APIENTRY * PFNGLGETUNIFORMOFFSETEXTPROC) (GLuint program, GLint location);
+PFNGLUNIFORMBUFFEREXTPROC p_glUniformBufferEXT = NULL;
+PFNGLGETUNIFORMBUFFERSIZEEXTPROC p_glGetUniformBufferSizeEXT = NULL;
+PFNGLGETUNIFORMOFFSETEXTPROC p_glGetUniformOffsetEXT = NULL;
+#ifndef GL_EXT_bindable_uniform
+#define GL_MAX_VERTEX_BINDABLE_UNIFORMS_EXT         0x8DE2
+#define GL_MAX_FRAGMENT_BINDABLE_UNIFORMS_EXT       0x8DE3
+#define GL_MAX_GEOMETRY_BINDABLE_UNIFORMS_EXT       0x8DE4
+#define GL_MAX_BINDABLE_UNIFORM_SIZE_EXT            0x8DED
+#define GL_UNIFORM_BUFFER_EXT                       0x8DEE
+#define GL_UNIFORM_BUFFER_BINDING_EXT               0x8DEF
+#endif
+
 /* ARB_multitexture prototypes */
 typedef void (APIENTRYP PFNGLACTIVETEXTUREARBPROC) (GLenum texture);
 PFNGLACTIVETEXTUREARBPROC p_glActiveTexture = NULL;
@@ -117,6 +133,7 @@ int     gWindowID = 0;
 int     gHaveGPUProgramParameters = 0;
 GLuint  gVBO;
 GLuint  gEBO;
+GLuint  gBindableBuffer = 0;
 GLuint  gVAO;
 GLuint  gVAO2;
 GLuint  gFBO;
@@ -125,6 +142,7 @@ GLuint  gFBOColorTexture1;
 GLuint  gFBODepthTexture;
 GLuint  gDummyTex;
 GLuint  gShader;
+GLuint  gShaderBindable;
 GLuint  gPostShader;
 GLuint  gVertexProgram;
 GLuint  gFragmentProgram;
@@ -134,6 +152,8 @@ GLuint  gPositionLoc = -1;
 GLuint  gQuadPositionLoc = -1;
 GLuint  gProjMatrixLoc = -1;
 GLuint  gMvMatrixLoc = -1;
+GLuint  gProjMatrixBindableLoc = -1;
+GLuint  gMvMatrixBindableLoc = -1;
 GLuint  gWindowWidth;
 GLuint  gWindowHeight;
 GLuint  gWindowHasBeenResized = 0;
@@ -141,6 +161,17 @@ GLuint  gWindowHasBeenResized = 0;
 
 /* Shader source */
 /******************************************************************************/
+
+const GLchar* basicVertexShaderSourceBindable =
+    "#extension GL_EXT_bindable_uniform : enable\n"
+    "attribute vec4         inPosition;\n"
+    "uniform mat4           inProjectionMatrix;\n"
+    "bindable uniform mat4  inModelViewMatrix;\n"
+    "void main()\n"
+    "{\n"
+    "   gl_Position = inProjectionMatrix * inModelViewMatrix* inPosition;\n"
+    "   gl_Position.z = 0.0;\n"
+    "}\n";
 
 const GLchar* basicVertexShaderSource =
     "attribute vec4  inPosition;\n"
@@ -384,12 +415,53 @@ static void createDummyTex()
 
 /******************************************************************************/
 
+static void utilGetMatrixLocations(GLuint prog,
+                                   GLuint *projMatrix,
+                                   GLuint *mvMatrix)
+{
+    *projMatrix = p_glGetUniformLocation(prog, "inProjectionMatrix");
+    *mvMatrix = p_glGetUniformLocation(prog, "inModelViewMatrix");
+}
+
+static void utilCreateBindableUniformBuffer()
+{
+    GLuint bufSize;
+
+    p_glGenBuffers(1, &gBindableBuffer);
+    if (!gBindableBuffer) {
+        fprintf(stderr, "Unable to create bindable uniform VBO\n");
+        gHaveBindableUniform = 0;
+        gUseBindableUniform = 0;
+        return;
+    }
+    p_glBindBuffer(GL_UNIFORM_BUFFER_EXT, gBindableBuffer);
+    p_glBufferData(GL_UNIFORM_BUFFER_EXT,
+                   sizeof(gModelViewMatrixf),
+                   NULL,
+                   GL_STATIC_DRAW);
+
+    /* Sanity size check */
+    bufSize = p_glGetUniformBufferSizeEXT(gShaderBindable, gMvMatrixBindableLoc);
+    if (bufSize != sizeof(gModelViewMatrixf)) {
+        fprintf(stderr, "bufSize (%d) != matrix size (%zd)\n",
+                bufSize,
+                sizeof(gModelViewMatrixf));
+        gHaveBindableUniform = 0;
+        gUseBindableUniform = 0;
+        return;
+    }
+    /* Bind the buffer to the bindable modelview matrix */
+    p_glUniformBufferEXT(gShaderBindable, gMvMatrixBindableLoc, gBindableBuffer);
+    p_glBufferSubData(GL_UNIFORM_BUFFER_EXT, 0, sizeof(gModelViewMatrixf), gModelViewMatrixf);
+}
+
 static void createShaders()
 {
     GLint status;
 
     /* The basic shader for the geometry */
     gShader = p_glCreateProgram();
+    GLuint vertexShaderBindable = 0;
     GLuint vertexShader= utilCompileShader(GL_VERTEX_SHADER,
                                            basicVertexShaderSource);
     GLuint fragmentShader = utilCompileShader(GL_FRAGMENT_SHADER,
@@ -404,6 +476,30 @@ static void createShaders()
     if (!status) {
         printf("program link error\n");
         utilPrintInfoLog(0, gShader);
+    }
+    utilGetMatrixLocations(gShader, &gProjMatrixLoc, &gMvMatrixLoc);
+
+    /* Vertex shader that uses EXT_bindable_uniform */
+    if (gHaveBindableUniform) {
+        gShaderBindable = p_glCreateProgram();
+        vertexShaderBindable = utilCompileShader(GL_VERTEX_SHADER,
+                                                 basicVertexShaderSourceBindable);
+
+        /* Use the same fragment shader */
+        p_glAttachShader(gShaderBindable, vertexShaderBindable);
+        p_glAttachShader(gShaderBindable, fragmentShader);
+
+        p_glLinkProgram(gShaderBindable);
+
+        p_glGetProgramiv(gShaderBindable, GL_LINK_STATUS, &status);
+        if (!status) {
+            printf("program link error from bindable shader\n");
+            utilPrintInfoLog(0, gShaderBindable);
+        }
+        utilGetMatrixLocations(gShaderBindable,
+                               &gProjMatrixBindableLoc,
+                               &gMvMatrixBindableLoc);
+        utilCreateBindableUniformBuffer();
     }
 
     /* The post processing shader */
@@ -567,10 +663,23 @@ static void createVertexBuffers()
 
 /******************************************************************************/
 
-static inline void update_modelview_constants(const float* params)
+/* Updates the modelview matrix with the given float params.  mtxLoc is only
+ * used in the GLSL case and is the handle to the matrix uniform */
+static inline void update_modelview_constants(const float* params, GLuint mtxLoc)
 {
-    if (gUseGLSL)
-        p_glUniformMatrix4fv(gMvMatrixLoc, 1, GL_FALSE, params);
+    if (gUseGLSL) {
+        if (gUseBindableUniform) {
+            /* TODO: Add other update mechanisms here for profiling:
+             *  - glUniform4fv() (would need to rework the shader a bit)
+             *  - glBufferSubData()
+             *  - APPLE_flush_buffer_range
+             *  - ARB_flush_buffer_range
+             */
+            p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
+        } else {
+            p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
+        }
+    }
     else {
         if (gHaveGPUProgramParameters)
             p_glProgramLocalParameters4fvEXT(GL_VERTEX_PROGRAM_ARB, 4, 4, params);
@@ -585,22 +694,29 @@ static inline void update_modelview_constants(const float* params)
 static void drawScene()
 {
     int i;
+    GLuint mvMtxLoc = 0;
 
     if (gUseGLSL) {
-        p_glUseProgram(gShader);
+        GLuint prog;
+        GLuint projMtxLoc;
+
+        if (gUseBindableUniform) {
+            prog = gShaderBindable;
+            projMtxLoc = gProjMatrixBindableLoc;
+            mvMtxLoc = gMvMatrixBindableLoc;
+        } else {
+            prog = gShader;
+            projMtxLoc = gProjMatrixLoc;
+            mvMtxLoc = gMvMatrixLoc;
+        }
+
+        /* Enable GLSL and disable any ARB programs */
+        p_glUseProgram(prog);
         glDisable(GL_VERTEX_PROGRAM_ARB);
-        p_glBindProgramARB(GL_VERTEX_PROGRAM_ARB, gVertexProgram);
         glDisable(GL_FRAGMENT_PROGRAM_ARB);
-        p_glBindProgramARB(GL_FRAGMENT_PROGRAM_ARB, gFragmentProgram);
 
         /* Upload new projection matrix */
-        if (gProjMatrixLoc == -1)
-            gProjMatrixLoc = p_glGetUniformLocation(gShader, "inProjectionMatrix");
-        p_glUniformMatrix4fv(gProjMatrixLoc, 1, GL_FALSE, gProjectionMatrixf);
-
-        /* Grab modelview uniform pointer if needed */
-        if (gMvMatrixLoc == -1)
-            gMvMatrixLoc = p_glGetUniformLocation(gShader, "inModelViewMatrix");
+        p_glUniformMatrix4fv(projMtxLoc, 1, GL_FALSE, gProjectionMatrixf);
 
     } else {
         p_glUseProgram(0);
@@ -628,7 +744,7 @@ static void drawScene()
                 p_glBindVertexArray(gVAO);
 
             if (gResetConstants || i == 0)
-                update_modelview_constants(gModelViewMatrixf);
+                update_modelview_constants(gModelViewMatrixf, mvMtxLoc);
 
             glDrawElements(GL_TRIANGLES, NUM_INDICES*3, GL_UNSIGNED_SHORT, BUFFER_OFFSET(0));
 
@@ -636,7 +752,7 @@ static void drawScene()
                 p_glBindVertexArray(gVAO2);
 
             if (gResetConstants || i == 0)
-                update_modelview_constants(gModelViewMatrixf2);
+                update_modelview_constants(gModelViewMatrixf2, mvMtxLoc);
 
             glDrawElements(GL_TRIANGLES, NUM_INDICES*3, GL_UNSIGNED_SHORT,BUFFER_OFFSET(0));
         }
@@ -656,7 +772,7 @@ static void drawScene()
                 p_glVertexAttribPointer(gPositionLoc, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
             if (gResetConstants || i == 0)
-                update_modelview_constants(gModelViewMatrixf);
+                update_modelview_constants(gModelViewMatrixf, mvMtxLoc);
 
             glDrawElements(GL_TRIANGLES, NUM_INDICES*3, GL_UNSIGNED_SHORT, BUFFER_OFFSET(0));
 
@@ -664,7 +780,7 @@ static void drawScene()
                 p_glVertexAttribPointer(gPositionLoc, 3, GL_FLOAT, GL_FALSE, 0, BUFFER_OFFSET(36));
 
             if (gResetConstants || i == 0)
-                update_modelview_constants(gModelViewMatrixf2);
+                update_modelview_constants(gModelViewMatrixf2, mvMtxLoc);
 
             glDrawElements(GL_TRIANGLES, NUM_INDICES*3, GL_UNSIGNED_SHORT,BUFFER_OFFSET(0));
         }
@@ -882,6 +998,17 @@ static void checkGLExtensions()
     } else {
         fprintf(stderr, "ERROR: VBO not supported\n");
         killProcess(1);
+    }
+
+    /* Grab bindable uniform pointers */
+    if (glutExtensionSupported("GL_EXT_bindable_uniform")) {
+        gHaveBindableUniform = 1;
+        GET_PROC_ADDRESS(p_glUniformBufferEXT, glUniformBufferEXT);
+        GET_PROC_ADDRESS(p_glGetUniformBufferSizeEXT, glGetUniformBufferSizeEXT);
+        GET_PROC_ADDRESS(p_glGetUniformOffsetEXT, glGetUniformOffsetEXT);
+    } else {
+        gHaveBindableUniform = 0;
+        gUseBindableUniform = 0;
     }
 
     /* Grab VAO extension pointers */

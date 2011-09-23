@@ -212,8 +212,6 @@ typedef int (APIENTRYP PFNWGLSWAPINTERVALEXTPROC) (int interval);
 PFNWGLSWAPINTERVALEXTPROC p_wglSwapIntervalEXT = NULL;
 
 
-#define CHECK_GL_ERROR do { GLint err = glGetError(); if (err != GL_NO_ERROR) fprintf(stderr, "GL Error: %x line: %d\n", err, __LINE__ ); } while (0);
-
 #define BUFFER_USAGE_FLAG GL_STATIC_DRAW
 
 /* OpenGL Globals */
@@ -1198,8 +1196,8 @@ void displayOpenGL()
 
 /******************************************************************************/
 
-/* We no longer use GLUT on Mac OS */
-#ifndef __APPLE__
+/* We no longer use GLUT on Mac OS or Linux */
+#ifdef __WIN32__
 
 /* GLUT keybaard callback */
 static void cbKeyboard(unsigned char key, int x, int y)
@@ -1546,7 +1544,7 @@ void setViewportOGL(int x, int y, int width, int height)
 
 void shutdownOpenGL()
 {
-#ifndef __APPLE__
+#ifdef __WIN32__
     if (gWindowID)
         glutDestroyWindow(gWindowID);
 #endif
@@ -1595,6 +1593,8 @@ void initOpenGL(int argc, char **argv)
 {
 #ifdef __APPLE__
     initMacOS();
+#elif defined(linux)
+    initLinux();
 #else
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);

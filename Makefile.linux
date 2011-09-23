@@ -1,8 +1,8 @@
 CC=gcc
 CFLAGS=-Wall -O3 -I/usr/include/GL/
-LDFLAGS= -lGL -lglut
+LDFLAGS= -lGL
 
-perftest: perftest.o perftest_d3d9.o perftest_ogl.o
+perftest: perftest.o perftest_d3d9.o perftest_ogl.o perftest_linux.o
 
 clean: 
 	rm -f perftest *.o

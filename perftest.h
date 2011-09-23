@@ -14,7 +14,8 @@
 #include <d3d9.h>
 
 #elif defined(linux)
-#include <GL/glut.h>
+#include <GL/gl.h>
+#include <GL/glext.h>
 #include <GL/glx.h>
 
 #elif defined(__APPLE__)
@@ -31,6 +32,8 @@
 #include <sys/time.h>
 #include <stdio.h>
 
+
+#define CHECK_GL_ERROR do { GLint err = glGetError(); if (err != GL_NO_ERROR) fprintf(stderr, "GL Error: %x file: %s, line: %d\n", err, __FILE__, __LINE__ ); } while (0);
 
 /* Matrix index macro */
 #define MAT4_INDEX(i,j) (j*4+i)
@@ -137,4 +140,9 @@ extern void toggleFlushBufferRange(int enable);
 /* perftest_mac.c */
 #ifdef __APPLE__
 extern void initMacOS();
+#endif
+
+/* perftest_linux.c */
+#ifdef linux
+extern void initLinux();
 #endif

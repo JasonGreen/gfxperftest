@@ -30,6 +30,9 @@ Cygwin's base installation or MinGW in order to get a bash shell.
 
 Running on Mac
 --------------
+To get keyboard input and a dock icon working, you need to run from the
+GfxPerfTest.app package, such as "./GfxPerfTest.app/Contents/MacOS/perftest".
+
 Mac has an extra command line option you can toggle, "-use_multithreaded_gl".
 This enables the multi-threaded GL engine, which should provide a framerate
 boost in some cases.  This is not toggled by default in the run_tests.sh

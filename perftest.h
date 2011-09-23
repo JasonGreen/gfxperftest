@@ -107,7 +107,13 @@ extern void setViewportD3D9(int x, int y, int width, int height);
 extern void shutdownD3D9();
 
 /* perftest_ogl.c */
+extern void displayOpenGL();
 extern void initOpenGL(int argc, char **argv);
+extern void initOpenGLStates();
 extern void setViewportOGL(int x, int y, int width, int height);
 extern void shutdownOpenGL();
 
+/* perftest_mac.c */
+#ifdef __APPLE__
+extern void initMacOS();
+#endif

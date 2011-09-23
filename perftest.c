@@ -432,6 +432,10 @@ static void parseCommandLineOptions(int argc, char** argv)
         if (argv[i][0] != '-')
             break;
 
+        /* Ignore the process ID when launching from a Mac OS bundle */
+        if (strstr(argv[i], "psn"))
+            continue;
+
         parseIntArgument(argv[i], "use_d3d9", &gUseD3D9);
         parseIntArgument(argv[i], "use_multithreaded_gl", &gUseMultiThreadedGL);
         parseIntArgument(argv[i], "use_glsl", &gUseGLSL);

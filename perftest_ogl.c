@@ -844,8 +844,25 @@ static void drawScene()
     }
 }
 
+/* General OpenGL drawing routine */
+void displayOpenGL()
+{
+    update();
+
+    p_glBindFramebuffer(GL_FRAMEBUFFER_EXT, 0);
+    utilReshapeOrtho(gWindowWidth, gWindowHeight);
+    glClearColor(0,0,0,1);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    drawScene();
+}
+
 /******************************************************************************/
 
+/* We no longer use GLUT on Mac OS */
+#ifndef __APPLE__
+
+/* GLUT keybaard callback */
 static void cbKeyboard(unsigned char key, int x, int y)
 {
     /* Special handling for quitting app early */
@@ -856,29 +873,17 @@ static void cbKeyboard(unsigned char key, int x, int y)
             killProcess(0);
     }
 
-    /* Ignore keyboard entry if command line argument was passed */
-    if (gIgnoreKeyboard)
-        return;
-
     handleKeyPress(key);
 }
 
+/* GLUT display callback */
 static void cbDisplay(void)
 {
-    update();
-
-    p_glBindFramebuffer(GL_FRAMEBUFFER_EXT, 0);
-    utilReshapeOrtho(gWindowWidth, gWindowHeight);
-    glClearColor(0,0,0,1);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    drawScene();
-
+    displayOpenGL();
     glutSwapBuffers();
 }
 
-/******************************************************************************/
-
+/* GLUT reshape callback */
 static void cbReshape(int width, int height)
 {
     gWindowWidth = width;
@@ -887,12 +892,12 @@ static void cbReshape(int width, int height)
 
 }
 
-/******************************************************************************/
-
+/* GLUT idle callback */
 static void cbIdle(void)
 {
     glutPostRedisplay();
 }
+#endif
 
 /******************************************************************************/
 
@@ -1124,24 +1129,11 @@ void setViewportOGL(int x, int y, int width, int height)
 
 void shutdownOpenGL()
 {
+#ifndef __APPLE__
     if (gWindowID)
         glutDestroyWindow(gWindowID);
+#endif
 }
-
-void initOpenGL(int argc, char **argv)
-{
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
-    glutInitWindowSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
-
-    gWindowID = glutCreateWindow("GL3 Tutorial 2");
-    checkGLExtensions();
-
-    createDummyTex();
-    createFBO();
-    createShaders();
-    createARBPrograms();
-    createVertexBuffers();
 
 #ifndef GL_MULTISAMPLE_ARB
 #define GL_MULTISAMPLE_ARB 0x809D
@@ -1149,6 +1141,18 @@ void initOpenGL(int argc, char **argv)
 #ifndef GL_CLIP_VOLUME_CLIPPING_HINT_EXT
 #define GL_CLIP_VOLUME_CLIPPING_HINT_EXT 0x80F0
 #endif
+
+void initOpenGLStates()
+{
+    checkGLExtensions();
+    createDummyTex();
+    createFBO();
+    createShaders();
+    createARBPrograms();
+    createVertexBuffers();
+
+    gWindowWidth = DEFAULT_WINDOW_WIDTH;
+    gWindowHeight = DEFAULT_WINDOW_HEIGHT;
 
     /* Set to D3D defaults */
     glEnable(GL_DEPTH_TEST);
@@ -1160,12 +1164,26 @@ void initOpenGL(int argc, char **argv)
     glDisable(GL_DITHER);
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
     glHint(GL_CLIP_VOLUME_CLIPPING_HINT_EXT, GL_FASTEST);
+}
+
+void initOpenGL(int argc, char **argv)
+{
+#ifdef __APPLE__
+    initMacOS();
+#else
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
+    glutInitWindowSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
+
+    gWindowID = glutCreateWindow("GfxPerfTest");
+
+    initOpenGLStates();
 
     glutDisplayFunc(cbDisplay);
     glutKeyboardFunc(cbKeyboard);
     glutReshapeFunc(cbReshape);
     glutIdleFunc(cbIdle);
-
     glutMainLoop();
+#endif
 }
 

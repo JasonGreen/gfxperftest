@@ -73,6 +73,8 @@ enum {
     BINDABLE_UPDATE_BUFFERSUBDATA_WITH_DISCARD = 4,
     BINDABLE_UPDATE_MAPBUFFER = 5,
     BINDABLE_UPDATE_MAPBUFFER_WITH_DISCARD = 6,
+    BINDABLE_UPDATE_FLUSH_BUFFER_RANGE = 7,
+    BINDABLE_UPDATE_FLUSH_BUFFER_RANGE_WITH_DISCARD = 8,
     BINDABLE_UPDATE_NUM_METHODS
 };
 
@@ -115,6 +117,7 @@ extern void initOpenGL(int argc, char **argv);
 extern void initOpenGLStates();
 extern void setViewportOGL(int x, int y, int width, int height);
 extern void shutdownOpenGL();
+extern void toggleFlushBufferRange(int enable);
 
 /* perftest_mac.c */
 #ifdef __APPLE__

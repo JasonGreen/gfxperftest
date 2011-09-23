@@ -514,6 +514,8 @@ static void utilCreateBindableUniformBuffer()
                    NULL,
                    GL_STATIC_DRAW);
 
+    toggleFlushBufferRange(gBindableUpdateMethod >= BINDABLE_UPDATE_FLUSH_BUFFER_RANGE);
+
     /* Sanity size check */
     bufSize = p_glGetUniformBufferSizeEXT(gShaderBindable, gMvMatrixBindableLoc);
     if (bufSize != sizeof(gModelViewMatrixf)) {
@@ -749,8 +751,7 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
         if (gUseBindableUniform) {
             /* TODO: Add other update mechanisms here for profiling:
              *  - glUniform4fv() (would need to rework the shader a bit)
-             *  - APPLE_flush_buffer_range
-             *  - ARB_flush_buffer_range
+             *  - ARB_map_buffer_range
              *  - Ring buffer approach using multiple buffer objects
              */
             switch (gBindableUpdateMethod) {
@@ -796,6 +797,24 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                                                GL_WRITE_ONLY);
                     if (ptr) {
                         memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        p_glUnmapBuffer(GL_UNIFORM_BUFFER_EXT);
+                    } else
+                        fprintf(stderr, "ERROR: Unable to map buffer!\n");
+                    break;
+                }
+                case BINDABLE_UPDATE_FLUSH_BUFFER_RANGE_WITH_DISCARD:
+                    p_glBufferData(GL_UNIFORM_BUFFER_EXT,
+                                   sizeof(gModelViewMatrixf),
+                                   NULL, GL_STATIC_DRAW);
+                    /* Fall-through */
+                case BINDABLE_UPDATE_FLUSH_BUFFER_RANGE:
+                {
+                    /* Update uniform buffer contents with glMapBuffer */
+                    void * ptr = p_glMapBuffer(GL_UNIFORM_BUFFER_EXT,
+                                               GL_WRITE_ONLY);
+                    if (ptr) {
+                        memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        p_glFlushMappedBufferRangeAPPLE(GL_UNIFORM_BUFFER_EXT, 0, sizeof(gModelViewMatrixf));
                         p_glUnmapBuffer(GL_UNIFORM_BUFFER_EXT);
                     } else
                         fprintf(stderr, "ERROR: Unable to map buffer!\n");
@@ -1218,6 +1237,24 @@ static void checkGLExtensions()
 #endif
 
 #undef GET_PROC_ADDRESS
+}
+
+void toggleFlushBufferRange(int enable)
+{
+    /* Disallow APPLE_flush_buffer_range unless we have the extension */
+    if (!gHaveFlushBufferRange) {
+        if (gBindableUpdateMethod >= BINDABLE_UPDATE_FLUSH_BUFFER_RANGE)
+            gBindableUpdateMethod = 0;
+
+    } else {
+        /* If we want to enable the use of the extension, we need to disable these
+         * two buffer parameters. */
+        GLboolean val = (enable ? GL_FALSE : GL_TRUE);
+
+        /* Toggle the flushing buffer parameters if necessary */
+        p_glBufferParameteriAPPLE(GL_UNIFORM_BUFFER_EXT, GL_BUFFER_SERIALIZED_MODIFY_APPLE, val);
+        p_glBufferParameteriAPPLE(GL_UNIFORM_BUFFER_EXT, GL_BUFFER_FLUSHING_UNMAP_APPLE, val);
+    }
 }
 
 void setViewportOGL(int x, int y, int width, int height)

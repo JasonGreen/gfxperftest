@@ -415,6 +415,9 @@ int handleKeyPress(unsigned char key)
             if (gUseBindableUniform) {
                 gBindableUpdateMethod = (gBindableUpdateMethod + 1) %
                                         BINDABLE_UPDATE_NUM_METHODS;
+
+                toggleFlushBufferRange(gBindableUpdateMethod >= BINDABLE_UPDATE_FLUSH_BUFFER_RANGE);
+
                 printf("gBindableUpdateMethod: %d\n", gBindableUpdateMethod);
             }
             break;

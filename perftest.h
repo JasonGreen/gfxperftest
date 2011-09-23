@@ -146,3 +146,11 @@ extern void initMacOS();
 #ifdef linux
 extern void initLinux();
 #endif
+
+/* perftest_win32.c */
+#ifdef __WIN32__
+extern BOOL gIsQuitting;
+
+extern HWND createWindowWin32();
+#endif
+

@@ -207,10 +207,6 @@ typedef void (APIENTRYP PFNGLPROGRAMLOCALPARAMETERS4FVEXTPROC) (GLenum target, G
 PFNGLPROGRAMENVPARAMETERS4FVEXTPROC p_glProgramEnvParameters4fvEXT = NULL;
 PFNGLPROGRAMENVPARAMETERS4FVEXTPROC p_glProgramLocalParameters4fvEXT = NULL;
 
-/* Windows VSync command */
-typedef int (APIENTRYP PFNWGLSWAPINTERVALEXTPROC) (int interval);
-PFNWGLSWAPINTERVALEXTPROC p_wglSwapIntervalEXT = NULL;
-
 
 #define BUFFER_USAGE_FLAG GL_STATIC_DRAW
 
@@ -1196,48 +1192,6 @@ void displayOpenGL()
 
 /******************************************************************************/
 
-/* We no longer use GLUT on Mac OS or Linux */
-#ifdef __WIN32__
-
-/* GLUT keybaard callback */
-static void cbKeyboard(unsigned char key, int x, int y)
-{
-    /* Special handling for quitting app early */
-    switch(key) {
-        case 'q':
-        case 'Q':
-            /* Quit */
-            killProcess(0);
-    }
-
-    handleKeyPress(key);
-}
-
-/* GLUT display callback */
-static void cbDisplay(void)
-{
-    displayOpenGL();
-    glutSwapBuffers();
-}
-
-/* GLUT reshape callback */
-static void cbReshape(int width, int height)
-{
-    gWindowWidth = width;
-    gWindowHeight = height;
-    gWindowHasBeenResized = 1;
-
-}
-
-/* GLUT idle callback */
-static void cbIdle(void)
-{
-    glutPostRedisplay();
-}
-#endif
-
-/******************************************************************************/
-
 static void* getGLProcAddress(const char *fncString)
 {
 #ifdef __APPLE__
@@ -1498,16 +1452,6 @@ static void checkGLExtensions()
         gHaveGPUProgramParameters  = 1;
     }
 
-    /* Disable VSync on Windows if the wgl functions is available */
-#ifdef __WIN32__
-    GET_PROC_ADDRESS(p_wglSwapIntervalEXT, wglSwapIntervalEXT);
-    if (p_wglSwapIntervalEXT) {
-        if (!p_wglSwapIntervalEXT(0)) {
-            fprintf(stderr, "WARNING: Cannot disable VSync!\n");
-        }
-    }
-#endif
-
 #ifdef __APPLE__
     /* Enable multi-threaded GL if enabled */
     if (gUseMultiThreadedGL)
@@ -1544,10 +1488,7 @@ void setViewportOGL(int x, int y, int width, int height)
 
 void shutdownOpenGL()
 {
-#ifdef __WIN32__
-    if (gWindowID)
-        glutDestroyWindow(gWindowID);
-#endif
+    /* TODO: Clean shutdown for the various platforms */
 }
 
 #ifndef GL_MULTISAMPLE_ARB
@@ -1595,20 +1536,10 @@ void initOpenGL(int argc, char **argv)
     initMacOS();
 #elif defined(linux)
     initLinux();
+#elif defined(__WIN32__)
+    initOpenGLWin32();
 #else
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH | GLUT_STENCIL);
-    glutInitWindowSize(DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT);
-
-    gWindowID = glutCreateWindow("GfxPerfTest");
-
-    initOpenGLStates();
-
-    glutDisplayFunc(cbDisplay);
-    glutKeyboardFunc(cbKeyboard);
-    glutReshapeFunc(cbReshape);
-    glutIdleFunc(cbIdle);
-    glutMainLoop();
+    fprint(stderr, "Platform not supported!\n");
 #endif
 }
 

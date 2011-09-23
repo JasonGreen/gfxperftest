@@ -17,10 +17,6 @@ static IDirect3DIndexBuffer9 *gIndexBufferPtr = NULL;
 static IDirect3DVertexDeclaration9 *gVertexDeclPtr = NULL;
 static IDirect3DSurface9 *gDeviceBackBufferPtr = NULL;
 
-static HWND hwnd = NULL;
-
-static BOOL gIsQuitting = FALSE;
-
 /* D3D version of the shaders used in perftest_ogl.c
  *  - inPosition = v[0]
  *  - inProjectionMatrix c[0..3]
@@ -60,51 +56,6 @@ static const char* basicPixelShaderSourceD3D9 =
     "ps.1.1\n"
     "def c0, 0.0, 1.0, 0.0, 1.0;\n"
     "mov r0, c0;\n";
-#endif
-
-#ifdef __WIN32__
-LRESULT CALLBACK WndProcD3D9(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    switch(msg) {
-        case WM_KEYDOWN:
-            switch (wParam) {
-                case 'q':
-                case 'Q':
-                    /* Quit */
-                    gIsQuitting = TRUE;
-                    break;
-                default:
-                    if (handleKeyPress(wParam))
-                        return 0;
-                    else
-                        return DefWindowProc(hwnd, msg, wParam, lParam);
-            }
-            break;
-        case WM_CLOSE:
-            DestroyWindow(hwnd);
-            gIsQuitting = TRUE;
-            break;
-        case WM_DESTROY:
-            gIsQuitting = TRUE;
-            break;
-        default:
-            return DefWindowProc(hwnd, msg, wParam, lParam);
-    }
-    return 0;
-}
-
-static HWND create_window(void)
-{
-    WNDCLASS wc = {0};
-    HWND hwnd;
-    wc.lpfnWndProc = WndProcD3D9;
-    wc.lpszClassName = "d3d9_perftest_c";
-    RegisterClass(&wc);
-
-    hwnd = CreateWindow("d3d9_perftest_c", "D3D9 perf test",
-                        WS_MAXIMIZE | WS_VISIBLE | WS_CAPTION , 0, 0, DEFAULT_WINDOW_WIDTH, DEFAULT_WINDOW_HEIGHT, 0, 0, 0, 0);
-    return hwnd;
-}
 
 static void createDummyTexD3D9()
 {
@@ -341,6 +292,7 @@ void initD3D9()
     D3DPRESENT_PARAMETERS present_parameters;
     D3DADAPTER_IDENTIFIER9 identifier;
     HRESULT hr;
+    HWND hwnd;
 
     d3d9_handle = LoadLibraryA("d3d9.dll");
     if (!d3d9_handle) {
@@ -360,7 +312,7 @@ void initD3D9()
         return;
     }
 
-    hwnd = create_window();
+    hwnd = createWindowWin32();
 
     ZeroMemory(&present_parameters, sizeof(present_parameters));
     present_parameters.Windowed = FALSE;

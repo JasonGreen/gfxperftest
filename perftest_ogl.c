@@ -32,6 +32,20 @@ PFNGLFLUSHMAPPEDBUFFERRANGEAPPLEPROC p_glFlushMappedBufferRangeAPPLE = NULL;
 #define GL_BUFFER_FLUSHING_UNMAP_APPLE    0x8A13
 #endif
 
+/* ARB_map_buffer_range */
+typedef void *(APIENTRY * PFNGLMAPBUFFERRANGEPROC) (GLenum target, GLintptr offset, GLsizeiptr length, GLbitfield access);
+typedef void (APIENTRY * PFNGLFLUSHMAPPEDBUFFERRANGEPROC) (GLenum target, GLintptr offset, GLsizeiptr length);
+PFNGLMAPBUFFERRANGEPROC p_glMapBufferRange = NULL;
+PFNGLFLUSHMAPPEDBUFFERRANGEPROC p_glFlushMappedBufferRange = NULL;
+#ifndef GL_ARB_map_buffer_range
+#define GL_MAP_READ_BIT                     0x0001
+#define GL_MAP_WRITE_BIT                    0x0002
+#define GL_MAP_INVALIDATE_RANGE_BIT         0x0004
+#define GL_MAP_INVALIDATE_BUFFER_BIT        0x0008
+#define GL_MAP_FLUSH_EXPLICIT_BIT           0x0010
+#define GL_MAP_UNSYNCHRONIZED_BIT           0x0020
+#endif
+
 /* ARB_vertex_buffer_object prototypes */
 typedef void (APIENTRY * PFNGLBINDBUFFERARBPROC) (GLenum target, GLuint buffer);
 typedef void (APIENTRY * PFNGLGENBUFFERSARBPROC) (GLsizei n, GLuint *buffers);
@@ -215,6 +229,7 @@ GLuint  gUBOBuffer = 0;
 GLuint  gVAO;
 GLuint  gVAO2;
 GLuint  gFBO;
+int     gHaveMapBufferRange = 0;
 GLuint  gFBOColorTexture;
 GLuint  gFBOColorTexture1;
 GLuint  gFBODepthTexture;
@@ -1433,6 +1448,13 @@ static void checkGLExtensions()
         gHaveFlushBufferRange = 1;
         GET_PROC_ADDRESS(p_glBufferParameteriAPPLE, glBufferParameteriAPPLE);
         GET_PROC_ADDRESS(p_glFlushMappedBufferRangeAPPLE, glFlushMappedBufferRangeAPPLE);
+    }
+
+    /* Grab ARB_map_buffer_object pointers */
+    if ((gGLMajor >= 3) || HAVE_EXTENSION("GL_ARB_map_buffer_object")) {
+        gHaveMapBufferRange = 1;
+        GET_CORE_PROC_ADDRESS(glMapBufferRange);
+        GET_CORE_PROC_ADDRESS(glFlushMappedBufferRange);
     }
 
     /* Grab VAO extension pointers */

@@ -115,13 +115,13 @@ static void loop_callback(CFRunLoopObserverRef observer, CFRunLoopActivity activ
 
     [window makeFirstResponder:window];
     [window makeKeyAndOrderFront:window];
-    [format dealloc];
+    [format release];
 }
 
 -(void)dealloc
 {
-    [window dealloc];
-    [view dealloc];
+    [window release];
+    [view release];
     [super dealloc];
 }
 

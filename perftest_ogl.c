@@ -210,6 +210,7 @@ int     gHaveFlushBufferRange = 0;
 GLuint  gVBO;
 GLuint  gEBO;
 GLuint  gBindableBuffer = 0;
+GLuint  gUBOBuffer = 0;
 GLuint  gVAO;
 GLuint  gVAO2;
 GLuint  gFBO;
@@ -219,6 +220,7 @@ GLuint  gFBODepthTexture;
 GLuint  gDummyTex;
 GLuint  gShader;
 GLuint  gShaderBindable;
+GLuint  gShaderUBO;
 GLuint  gPostShader;
 GLuint  gVertexProgram;
 GLuint  gFragmentProgram;
@@ -230,6 +232,7 @@ GLuint  gProjMatrixLoc = -1;
 GLuint  gMvMatrixLoc = -1;
 GLuint  gProjMatrixBindableLoc = -1;
 GLuint  gMvMatrixBindableLoc = -1;
+GLuint  gProjMatrixUBOLoc = -1;
 GLuint  gWindowWidth;
 GLuint  gWindowHeight;
 GLuint  gWindowHasBeenResized = 0;
@@ -245,6 +248,18 @@ const GLchar* basicVertexShaderSourceBindable =
     "void main()\n"
     "{\n"
     "   gl_Position = inProjectionMatrix * inModelViewMatrix* inPosition;\n"
+    "   gl_Position.z = 0.0;\n"
+    "}\n";
+
+const GLchar* basicVertexShaderSourceUBO =
+    "#extension GL_ARB_uniform_buffer_object : enable\n"
+    "attribute vec4         inPosition;\n"
+    "uniform mat4           inProjectionMatrix;\n"
+    "layout(std140) uniform UBO\n"
+    "    { mat4 inModelViewMatrix; };\n"
+    "void main()\n"
+    "{\n"
+    "   gl_Position = inProjectionMatrix * inModelViewMatrix * inPosition;\n"
     "   gl_Position.z = 0.0;\n"
     "}\n";
 
@@ -495,7 +510,8 @@ static void utilGetMatrixLocations(GLuint prog,
                                    GLuint *mvMatrix)
 {
     *projMatrix = p_glGetUniformLocation(prog, "inProjectionMatrix");
-    *mvMatrix = p_glGetUniformLocation(prog, "inModelViewMatrix");
+    if (mvMatrix != NULL)
+        *mvMatrix = p_glGetUniformLocation(prog, "inModelViewMatrix");
 }
 
 static void utilCreateBindableUniformBuffer()
@@ -532,6 +548,65 @@ static void utilCreateBindableUniformBuffer()
     p_glBufferSubData(GL_UNIFORM_BUFFER_EXT, 0, sizeof(gModelViewMatrixf), gModelViewMatrixf);
 }
 
+/* Create the buffer object for ARB_uniform_buffer_object */
+static void utilCreateUniformBufferObject()
+{
+    GLint blockSize, matSize, offset;
+    GLuint index;
+    /* WTF? */
+#ifdef __APPLE__
+    const GLchar *varName = "UBO.inModelViewMatrix";
+#else
+    const GLchar *varName = "inModelViewMatrix";
+#endif
+
+    /* Sanity checks - make sure the offset is 0, the blocksize is the size of
+     * the modelview matrix, and the matrix size is 1 element. */
+    GLuint blockIndex = p_glGetUniformBlockIndex(gShaderUBO, "UBO");
+    p_glGetActiveUniformBlockiv(gShaderUBO, blockIndex,
+                                GL_UNIFORM_BLOCK_DATA_SIZE, &blockSize);
+    p_glGetUniformIndices(gShaderUBO, 1, &varName, &index);
+    p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_OFFSET, &offset);
+    p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_SIZE, &matSize);
+
+    if ((blockSize != sizeof(gModelViewMatrixf)) ||
+        (matSize != 1) ||
+        (offset != 0)) {
+        fprintf(stderr, "UBO sanity checks fail: blockSize=%d, matSize=%d,"
+                        "blockIndex=%d, index=%d, offset=%d, matrix size: %zd\n",
+                blockSize, matSize, blockIndex, index, offset,
+                sizeof(gModelViewMatrixf));
+        gHaveUniformBufferObject = 0;
+        gUseUniformBufferObject = 0;
+        return;
+    }
+
+    /* Generate the backing store buffer */
+    p_glGenBuffers(1, &gUBOBuffer);
+    if (!gUBOBuffer) {
+        fprintf(stderr, "Unable to create ARB_uniform_buffer_object VBO\n");
+        gHaveUniformBufferObject = 0;
+        gUseUniformBufferObject = 0;
+        return;
+    }
+
+    /* NOTE: GL_UNIFORM_BUFFER is not the same as GL_UNIFORM_BUFFER_EXT! */
+    p_glBindBuffer(GL_UNIFORM_BUFFER, gUBOBuffer);
+    /* Allocate our buffer space */
+    p_glBufferData(GL_UNIFORM_BUFFER,
+                   sizeof(gModelViewMatrixf),
+                   NULL,
+                   BUFFER_USAGE_FLAG);
+
+    /* Bind the buffer to UBO binding point 0, */
+    p_glBindBufferBase(GL_UNIFORM_BUFFER, 0, gUBOBuffer);
+    /* then associate our uniform block to the same binding point. */
+    p_glUniformBlockBinding(gShaderUBO, blockIndex, 0);
+
+    /* Upload the initial data */
+    p_glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(gModelViewMatrixf), gModelViewMatrixf);
+}
+
 static void createShaders()
 {
     GLint status;
@@ -539,6 +614,7 @@ static void createShaders()
     /* The basic shader for the geometry */
     gShader = p_glCreateProgram();
     GLuint vertexShaderBindable = 0;
+    GLuint vertexShaderUBO = 0;
     GLuint vertexShader= utilCompileShader(GL_VERTEX_SHADER,
                                            basicVertexShaderSource);
     GLuint fragmentShader = utilCompileShader(GL_FRAGMENT_SHADER,
@@ -577,6 +653,29 @@ static void createShaders()
                                &gProjMatrixBindableLoc,
                                &gMvMatrixBindableLoc);
         utilCreateBindableUniformBuffer();
+    }
+
+    /* Vertex shader that uses ARB_uniform_buffer_object */
+    if (gHaveUniformBufferObject) {
+        gShaderUBO = p_glCreateProgram();
+        vertexShaderUBO = utilCompileShader(GL_VERTEX_SHADER,
+                                            basicVertexShaderSourceUBO);
+
+        /* Use the same fragment shader */
+        p_glAttachShader(gShaderUBO, vertexShaderUBO);
+        p_glAttachShader(gShaderUBO, fragmentShader);
+
+        p_glLinkProgram(gShaderUBO);
+
+        p_glGetProgramiv(gShaderUBO, GL_LINK_STATUS, &status);
+        if (!status) {
+            printf("program link error from UBO shader\n");
+            utilPrintInfoLog(0, gShaderUBO);
+        }
+        utilGetMatrixLocations(gShaderUBO,
+                               &gProjMatrixUBOLoc,
+                               NULL);
+        utilCreateUniformBufferObject();
     }
 
     /* The post processing shader */
@@ -828,6 +927,11 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                     break;
             }
 
+        } else if (gUseUniformBufferObject) {
+            /* Update uniform buffer contents with glBufferSubData */
+            p_glBufferSubData(GL_UNIFORM_BUFFER, 0,
+                              sizeof(gModelViewMatrixf), params);
+
         } else {
             p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
         }
@@ -846,7 +950,7 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
 static void drawScene()
 {
     int i;
-    GLuint mvMtxLoc = 0;
+    GLuint mvMtxLoc = -1;
 
     if (gUseGLSL) {
         GLuint prog;
@@ -856,6 +960,11 @@ static void drawScene()
             prog = gShaderBindable;
             projMtxLoc = gProjMatrixBindableLoc;
             mvMtxLoc = gMvMatrixBindableLoc;
+        } else if (gUseUniformBufferObject) {
+            prog = gShaderUBO;
+            projMtxLoc = gProjMatrixUBOLoc;
+            /* With UBO, there isn't a regular uniform location for mvMtxLoc.
+             * The UBO constant update function uses the buffer solely. */
         } else {
             prog = gShader;
             projMtxLoc = gProjMatrixLoc;

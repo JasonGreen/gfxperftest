@@ -324,6 +324,7 @@ static void displayHelp()
     printf("  -use_multithreaded_gl=[0,1]  1 = Use MultiThreaded GL (Mac only) (M)\n");
     printf("  -use_glsl=[0,1]              1 = Use GLSL, 0 = Use ARB_vp/fp (G)\n");
     printf("  -use_bindable_uniform=[0,1]  1 = Use EXT_bindable_uniform with GLSL (B)\n");
+    printf("  -use_ubo=[0,1]               1 = Use ARB_uniform_buffer_object with GLSL (O)\n");
     printf("  -bindable_update_method=[0..%d] Which bindable uniform update method (U)\n", BINDABLE_UPDATE_NUM_METHODS);
     printf("  -use_vao=[0,1]               1 = Use VAO, 0 = Use general vertex attrib calls (V)\n");
     printf("  -reset_constants=[0,1]       1 = Reset constants before each draw call (C)\n");
@@ -367,8 +368,12 @@ int handleKeyPress(unsigned char key)
     switch(key) {
         case 'b':
         case 'B':
-            if (!gUseD3D9 && gHaveBindableUniform && gUseGLSL)
+            if (!gUseD3D9 && gHaveBindableUniform && gUseGLSL) {
                 TOGGLE_OPTION(gUseBindableUniform);
+                /* The UBO and BU options are mutually exclusive */
+                if (gUseBindableUniform)
+                    gUseUniformBufferObject = 0;
+            }
             break;
         case 'c':
         case 'C':
@@ -390,6 +395,15 @@ int handleKeyPress(unsigned char key)
                     CGLDisable(CGLGetCurrentContext(), kCGLCEMPEngine);
             }
 #endif
+            break;
+        case 'o':
+        case 'O':
+            if (!gUseD3D9 && gHaveUniformBufferObject && gUseGLSL) {
+                TOGGLE_OPTION(gUseUniformBufferObject);
+                /* The UBO and BU options are mutually exclusive */
+                if (gUseUniformBufferObject)
+                    gUseBindableUniform = 0;
+            }
             break;
         case 'p':
         case 'P':
@@ -445,6 +459,7 @@ static void parseCommandLineOptions(int argc, char** argv)
         parseIntArgument(argv[i], "use_multithreaded_gl", &gUseMultiThreadedGL);
         parseIntArgument(argv[i], "use_glsl", &gUseGLSL);
         parseIntArgument(argv[i], "use_bindable_uniform", &gUseBindableUniform);
+        parseIntArgument(argv[i], "use_ubo", &gUseUniformBufferObject);
         parseIntArgument(argv[i], "bindable_update_method", &gBindableUpdateMethod);
         parseIntArgument(argv[i], "use_vao", &gUseVAO);
         parseIntArgument(argv[i], "reset_constants", &gResetConstants);
@@ -452,6 +467,10 @@ static void parseCommandLineOptions(int argc, char** argv)
         parseIntArgument(argv[i], "num_draw_calls_per_frame", &gNumDrawCalls);
         parseIntArgument(argv[i], "num_frames", &gNumFrames);
         parseIntArgument(argv[i], "ignore_keyboard", &gIgnoreKeyboard);
+
+        /* The UBO and BU options are mutually exclusive */
+        if (gUseBindableUniform)
+            gUseUniformBufferObject = 0;
 
         /* If none of the valid options were found, display Help and quit */
         if (!gCommandLineOptionsValid) {

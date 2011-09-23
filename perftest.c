@@ -14,12 +14,13 @@
    http://www.cfwdesign.se/gl3-tutorials/tutorial-2/
 */
 #include "perftest.h"
+#include <stdint.h>
 
 /* Globals */
 int     gCommandLineOptionsValid = 0;
 int     gUseD3D9 = 0;
-int     gLastFrameTime;
-int     gLastFPSDrawTime;
+uint64_t gLastFrameTime;
+uint64_t gLastFPSDrawTime;
 int     gLastFPSDrawFrameCount;
 int     gFPSFramesToSkip = 100; /* Skip the first 100 frames when averaging FPS (TODO: make configurable?) */
 int     gIgnoreKeyboard = 0;
@@ -228,6 +229,13 @@ static void init()
     utilReshape(gBufferWidth, gBufferHeight);
 }
 
+static uint64_t getTime()
+{
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000 + tv.tv_usec / 1000);
+}
+
 void update()
 {
     double T[16];
@@ -243,15 +251,14 @@ void update()
     /* Update */
     if (gLastFrameTime == 0)
     {
-        /* FIXME - we shouldn't use GLUT for timestamps in the D3D9 case. */
-        gLastFPSDrawTime = gLastFrameTime = glutGet(GLUT_ELAPSED_TIME);
+        gLastFPSDrawTime = gLastFrameTime = getTime();
         gLastFPSDrawFrameCount = 0;
     }
     else
         gLastFPSDrawFrameCount++;
 
-    int now = glutGet(GLUT_ELAPSED_TIME);
-    int elapsedMilliseconds = now - gLastFrameTime;
+    uint64_t now = getTime();
+    uint64_t elapsedMilliseconds = now - gLastFrameTime;
     float elapsedTime = elapsedMilliseconds / 1000.0f;
     gLastFrameTime = now;
 
@@ -261,10 +268,10 @@ void update()
     if (gIgnoreKeyboard) {
         /* For command line ,  */
         if (frame == gFPSFramesToSkip) {
-            gLastFPSDrawTime = gLastFrameTime = glutGet(GLUT_ELAPSED_TIME);
+            gLastFPSDrawTime = gLastFrameTime = getTime();
             gLastFPSDrawFrameCount = 0;
         } else if (frame == gNumFrames) {
-            printf("FPS: %f\n", (float)gLastFPSDrawFrameCount * 1000.0/ (now - gLastFPSDrawTime));
+            printf("FPS: %f\n", (float)gLastFPSDrawFrameCount * 1000.0f/ (now - gLastFPSDrawTime));
             killProcess(0);
         }
 
@@ -272,7 +279,7 @@ void update()
     } else {
         if ((now - gLastFPSDrawTime) >= 1000)
         {
-            printf("FPS: %f\n", (float)gLastFPSDrawFrameCount * 1000.0/ (now - gLastFPSDrawTime));
+            printf("FPS: %f\n", (float)gLastFPSDrawFrameCount * 1000.0f/ (now - gLastFPSDrawTime));
             gLastFPSDrawTime = now;
             gLastFPSDrawFrameCount = 0;
         }

@@ -78,6 +78,16 @@ enum {
     BINDABLE_UPDATE_NUM_METHODS
 };
 
+/* UBO uniform update methods */
+enum {
+    UBO_UPDATE_BUFFERDATA = 0,
+    UBO_UPDATE_BUFFERSUBDATA = 1,
+    UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD = 2,
+    UBO_UPDATE_MAPBUFFER = 3,
+    UBO_UPDATE_MAPBUFFER_WITH_DISCARD = 4,
+    UBO_UPDATE_NUM_METHODS
+};
+
 /* config options */
 extern int gIgnoreKeyboard;
 extern int gUseGLSL;
@@ -86,6 +96,7 @@ extern int gUseBindableUniform;
 extern int gHaveUniformBufferObject;
 extern int gUseUniformBufferObject;
 extern int gBindableUpdateMethod;
+extern int gUBOUpdateMethod;
 extern int gHaveVAO;
 extern int gUseVAO;
 extern int gResetVertexPointers;

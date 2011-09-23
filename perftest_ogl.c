@@ -899,6 +899,8 @@ static void createVertexBuffers()
 static inline void update_modelview_constants(const float* params, GLuint mtxLoc)
 {
     if (gUseGLSL) {
+
+        /* Using EXT_bindable_uniform */
         if (gUseBindableUniform) {
             /* TODO: Add other update mechanisms here for profiling:
              *  - glUniform4fv() (would need to rework the shader a bit)
@@ -978,11 +980,56 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                     break;
             }
 
+        /* Using ARB_uniform_buffer_object */
         } else if (gUseUniformBufferObject) {
-            /* Update uniform buffer contents with glBufferSubData */
-            p_glBufferSubData(GL_UNIFORM_BUFFER, 0,
-                              sizeof(gModelViewMatrixf), params);
+            /* TODO: Add other update mechanisms here for profiling:
+             *  - ARB_map_buffer_range
+             *  - Ring buffer approach using multiple buffer objects
+             */
+            switch (gUBOUpdateMethod) {
 
+                case UBO_UPDATE_BUFFERDATA:
+                    /* Replace uniform buffer contents with glBufferData */
+                    p_glBufferData(GL_UNIFORM_BUFFER,
+                                   sizeof(gModelViewMatrixf),
+                                   params, BUFFER_USAGE_FLAG);
+                    break;
+
+                case UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD:
+                    p_glBufferData(GL_UNIFORM_BUFFER,
+                                   sizeof(gModelViewMatrixf),
+                                   NULL, BUFFER_USAGE_FLAG);
+                    /* Fall-through */
+                case UBO_UPDATE_BUFFERSUBDATA:
+                    /* Update uniform buffer contents with glBufferSubData */
+                    p_glBufferSubData(GL_UNIFORM_BUFFER,
+                                      0, sizeof(gModelViewMatrixf), params);
+                    break;
+
+                case UBO_UPDATE_MAPBUFFER_WITH_DISCARD:
+                    p_glBufferData(GL_UNIFORM_BUFFER,
+                                   sizeof(gModelViewMatrixf),
+                                   NULL, BUFFER_USAGE_FLAG);
+                    /* Fall-through */
+                case UBO_UPDATE_MAPBUFFER:
+                {
+                    /* Update uniform buffer contents with glMapBuffer */
+                    void * ptr = p_glMapBuffer(GL_UNIFORM_BUFFER,
+                                               GL_WRITE_ONLY);
+                    if (ptr) {
+                        memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        p_glUnmapBuffer(GL_UNIFORM_BUFFER);
+                    } else
+                        fprintf(stderr, "ERROR: Unable to map buffer!\n");
+                    break;
+                }
+                default:
+                    fprintf(stderr, "ERROR: Unknown buffer update method: %d\n",
+                            gBindableUpdateMethod);
+                    break;
+            }
+
+        /* Just using regular glUniform commands */
         } else {
             p_glUniformMatrix4fv(mtxLoc, 1, GL_FALSE, params);
         }

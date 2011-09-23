@@ -30,6 +30,7 @@ int     gHaveBindableUniform = 0;
 int     gHaveUniformBufferObject = 0;
 int     gUseUniformBufferObject = 0;
 int     gBindableUpdateMethod = 0; /* Defaults to BINDABLE_UPDATE_GLUNIFORM */
+int     gUBOUpdateMethod = 0; /* DEFAULTS to UBO_UPDATE_BUFFERDATA */
 int     gUseVAO = 0;
 int     gResetVertexPointers = 0;
 int     gResetConstants = 0;
@@ -201,6 +202,38 @@ void utilReshape(GLuint width, GLuint height)
 
 }
 
+/* Debugging function to print out the name of the bindable update method */
+static inline const char* utilBindableString(int val)
+{
+    switch (val) {
+        case BINDABLE_UPDATE_GLUNIFORM:                       return "GLUNIFORM";
+        case BINDABLE_UPDATE_GLUNIFORM_WITH_DISCARD:          return "GLUNIFORM_WITH_DISCARD";
+        case BINDABLE_UPDATE_BUFFERDATA:                      return "BUFFERDATA";
+        case BINDABLE_UPDATE_BUFFERSUBDATA:                   return "BUFFERSUBDATA";
+        case BINDABLE_UPDATE_BUFFERSUBDATA_WITH_DISCARD:      return "BUFFERSUBDATA_WITH_DISCARD";
+        case BINDABLE_UPDATE_MAPBUFFER:                       return "MAPBUFFER";
+        case BINDABLE_UPDATE_MAPBUFFER_WITH_DISCARD:          return "MAPBUFFER_WITH_DISCARD";
+        case BINDABLE_UPDATE_FLUSH_BUFFER_RANGE:              return "FLUSH_BUFFER_RANGE";
+        case BINDABLE_UPDATE_FLUSH_BUFFER_RANGE_WITH_DISCARD: return "FLUSH_BUFFER_RANGE_WITH_DISCARD";
+        default:
+            return "ERROR";
+    }
+}
+
+/* Debugging function to print out the name of the UBO update method */
+static inline const char* utilUBOString(int val)
+{
+    switch (val) {
+        case UBO_UPDATE_BUFFERDATA:                 return "BUFFERDATA";
+        case UBO_UPDATE_BUFFERSUBDATA:              return "BUFFERSUBDATA";
+        case UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD: return "BUFFERSUBDATA_WITH_DISCARD";
+        case UBO_UPDATE_MAPBUFFER:                  return "MAPBUFFER";
+        case UBO_UPDATE_MAPBUFFER_WITH_DISCARD:     return "MAPBUFFER_WITH_DISCARD";
+        default:
+        return "ERROR";
+    }
+}
+
 /******************************************************************************/
 
 void utilReshapeOrtho(GLuint width, GLuint height)
@@ -327,6 +360,7 @@ static void displayHelp()
     printf("  -use_bindable_uniform=[0,1]  1 = Use EXT_bindable_uniform with GLSL (B)\n");
     printf("  -use_ubo=[0,1]               1 = Use ARB_uniform_buffer_object with GLSL (O)\n");
     printf("  -bindable_update_method=[0..%d] Which bindable uniform update method (U)\n", BINDABLE_UPDATE_NUM_METHODS);
+    printf("  -ubo_update_method=[0..%d]      Which UBO uniform update method (U)\n", UBO_UPDATE_NUM_METHODS);
     printf("  -use_vao=[0,1]               1 = Use VAO, 0 = Use general vertex attrib calls (V)\n");
     printf("  -reset_constants=[0,1]       1 = Reset constants before each draw call (C)\n");
     printf("  -reset_vertex_pointers=[0,1] 1 = Reset vertex pointers before each draw call (P)\n");
@@ -428,13 +462,20 @@ int handleKeyPress(unsigned char key)
             break;
         case 'u':
         case 'U':
+            /* This key handles both UBO and bindable_uniform updates since
+             * they are mutually exclusive options. */
             if (gUseBindableUniform) {
                 gBindableUpdateMethod = (gBindableUpdateMethod + 1) %
                                         BINDABLE_UPDATE_NUM_METHODS;
 
                 toggleFlushBufferRange(gBindableUpdateMethod >= BINDABLE_UPDATE_FLUSH_BUFFER_RANGE);
 
-                printf("gBindableUpdateMethod: %d\n", gBindableUpdateMethod);
+                printf("gBindableUpdateMethod: %s\n", utilBindableString(gBindableUpdateMethod));
+
+            } else if (gUseUniformBufferObject) {
+                gUBOUpdateMethod = (gUBOUpdateMethod + 1) %
+                                   UBO_UPDATE_NUM_METHODS;
+                printf("gUBOUpdateMethod: %s\n", utilUBOString(gUBOUpdateMethod));
             }
             break;
         default:

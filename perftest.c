@@ -229,6 +229,8 @@ static inline const char* utilUBOString(int val)
         case UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD: return "BUFFERSUBDATA_WITH_DISCARD";
         case UBO_UPDATE_MAPBUFFER:                  return "MAPBUFFER";
         case UBO_UPDATE_MAPBUFFER_WITH_DISCARD:     return "MAPBUFFER_WITH_DISCARD";
+        case UBO_UPDATE_MAPBUFFER_RANGE:            return "MAPBUFFER_RANGE";
+        case UBO_UPDATE_MAPBUFFER_RANGE_WITH_DISCARD: return "MAPBUFFER_RANGE_WITH_DISCARD";
         default:
         return "ERROR";
     }
@@ -475,6 +477,12 @@ int handleKeyPress(unsigned char key)
             } else if (gUseUniformBufferObject) {
                 gUBOUpdateMethod = (gUBOUpdateMethod + 1) %
                                    UBO_UPDATE_NUM_METHODS;
+
+                /* We need to have ARB_map_buffer_range for the last 2 update
+                 * methods */
+                if (gUBOUpdateMethod >= UBO_UPDATE_MAPBUFFER_RANGE && !gHaveMapBufferRange)
+                    gUBOUpdateMethod = 0;
+
                 printf("gUBOUpdateMethod: %s\n", utilUBOString(gUBOUpdateMethod));
             }
             break;

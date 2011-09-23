@@ -85,6 +85,8 @@ enum {
     UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD = 2,
     UBO_UPDATE_MAPBUFFER = 3,
     UBO_UPDATE_MAPBUFFER_WITH_DISCARD = 4,
+    UBO_UPDATE_MAPBUFFER_RANGE = 5,
+    UBO_UPDATE_MAPBUFFER_RANGE_WITH_DISCARD = 6,
     UBO_UPDATE_NUM_METHODS
 };
 
@@ -95,6 +97,7 @@ extern int gHaveBindableUniform;
 extern int gUseBindableUniform;
 extern int gHaveUniformBufferObject;
 extern int gUseUniformBufferObject;
+extern int gHaveMapBufferRange;
 extern int gBindableUpdateMethod;
 extern int gUBOUpdateMethod;
 extern int gHaveVAO;

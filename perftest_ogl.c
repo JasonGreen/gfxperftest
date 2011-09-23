@@ -997,8 +997,9 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
 
         /* Using ARB_uniform_buffer_object */
         } else if (gUseUniformBufferObject) {
+
+            GLbitfield access = 0;
             /* TODO: Add other update mechanisms here for profiling:
-             *  - ARB_map_buffer_range
              *  - Ring buffer approach using multiple buffer objects
              */
             switch (gUBOUpdateMethod) {
@@ -1033,6 +1034,25 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                                                GL_WRITE_ONLY);
                     if (ptr) {
                         memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        p_glUnmapBuffer(GL_UNIFORM_BUFFER);
+                    } else
+                        fprintf(stderr, "ERROR: Unable to map buffer!\n");
+                    break;
+                }
+                case UBO_UPDATE_MAPBUFFER_RANGE_WITH_DISCARD:
+                    access |= GL_MAP_INVALIDATE_BUFFER_BIT;
+                    /* Fall-through */
+                case UBO_UPDATE_MAPBUFFER_RANGE:
+                {
+                    access |= (GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT);
+                    /* Update uniform buffer contents with glMapBufferRange */
+                    void * ptr = p_glMapBufferRange(GL_UNIFORM_BUFFER, 0,
+                                                    sizeof(gModelViewMatrixf),
+                                                    access);
+                    if (ptr) {
+                        memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        p_glFlushMappedBufferRange(GL_UNIFORM_BUFFER, 0,
+                                                   sizeof(gModelViewMatrixf));
                         p_glUnmapBuffer(GL_UNIFORM_BUFFER);
                     } else
                         fprintf(stderr, "ERROR: Unable to map buffer!\n");

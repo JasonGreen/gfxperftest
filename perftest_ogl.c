@@ -52,6 +52,61 @@ PFNGLGETUNIFORMOFFSETEXTPROC p_glGetUniformOffsetEXT = NULL;
 #define GL_UNIFORM_BUFFER_BINDING_EXT               0x8DEF
 #endif
 
+/* ARB_uniform_buffer_object */
+typedef void (APIENTRYP PFNGLGETUNIFORMINDICESPROC) (GLuint program, GLsizei uniformCount, const GLchar* *uniformNames, GLuint *uniformIndices);
+typedef void (APIENTRYP PFNGLGETACTIVEUNIFORMSIVPROC) (GLuint program, GLsizei uniformCount, const GLuint *uniformIndices, GLenum pname, GLint *params);
+typedef void (APIENTRYP PFNGLGETACTIVEUNIFORMNAMEPROC) (GLuint program, GLuint uniformIndex, GLsizei bufSize, GLsizei *length, GLchar *uniformName);
+typedef GLuint (APIENTRYP PFNGLGETUNIFORMBLOCKINDEXPROC) (GLuint program, const GLchar *uniformBlockName);
+typedef void (APIENTRYP PFNGLGETACTIVEUNIFORMBLOCKIVPROC) (GLuint program, GLuint uniformBlockIndex, GLenum pname, GLint *params);
+typedef void (APIENTRYP PFNGLGETACTIVEUNIFORMBLOCKNAMEPROC) (GLuint program, GLuint uniformBlockIndex, GLsizei bufSize, GLsizei *length, GLchar *uniformBlockName);
+typedef void (APIENTRYP PFNGLUNIFORMBLOCKBINDINGPROC) (GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding);
+typedef void (APIENTRY * PFNGLBINDBUFFERRANGEPROC) (GLenum target, GLuint index, GLuint buffer, GLintptr offset, GLsizeiptr size);
+typedef void (APIENTRY * PFNGLBINDBUFFERBASEPROC) (GLenum target, GLuint index, GLuint buffer);
+PFNGLGETUNIFORMINDICESPROC p_glGetUniformIndices = NULL;
+PFNGLGETACTIVEUNIFORMSIVPROC p_glGetActiveUniformsiv = NULL;
+PFNGLGETACTIVEUNIFORMNAMEPROC p_glGetActiveUniformName = NULL;
+PFNGLGETUNIFORMBLOCKINDEXPROC p_glGetUniformBlockIndex = NULL;
+PFNGLGETACTIVEUNIFORMBLOCKIVPROC p_glGetActiveUniformBlockiv = NULL;
+PFNGLGETACTIVEUNIFORMBLOCKNAMEPROC p_glGetActiveUniformBlockName = NULL;
+PFNGLUNIFORMBLOCKBINDINGPROC p_glUniformBlockBinding = NULL;
+PFNGLBINDBUFFERRANGEPROC p_glBindBufferRange = NULL;
+PFNGLBINDBUFFERBASEPROC p_glBindBufferBase = NULL;
+#ifndef GL_ARB_uniform_buffer_object
+#define GL_UNIFORM_BUFFER                               0x8A11
+#define GL_UNIFORM_BUFFER_BINDING                       0x8A28
+#define GL_UNIFORM_BUFFER_START                         0x8A29
+#define GL_UNIFORM_BUFFER_SIZE                          0x8A2A
+#define GL_MAX_VERTEX_UNIFORM_BLOCKS                    0x8A2B
+#define GL_MAX_GEOMETRY_UNIFORM_BLOCKS                  0x8A2C
+#define GL_MAX_FRAGMENT_UNIFORM_BLOCKS                  0x8A2D
+#define GL_MAX_COMBINED_UNIFORM_BLOCKS                  0x8A2E
+#define GL_MAX_UNIFORM_BUFFER_BINDINGS                  0x8A2F
+#define GL_MAX_UNIFORM_BLOCK_SIZE                       0x8A30
+#define GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS       0x8A31
+#define GL_MAX_COMBINED_GEOMETRY_UNIFORM_COMPONENTS     0x8A32
+#define GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS     0x8A33
+#define GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT              0x8A34
+#define GL_ACTIVE_UNIFORM_BLOCK_MAX_NAME_LENGTH         0x8A35
+#define GL_ACTIVE_UNIFORM_BLOCKS                        0x8A36
+#define GL_UNIFORM_TYPE                                 0x8A37
+#define GL_UNIFORM_SIZE                                 0x8A38
+#define GL_UNIFORM_NAME_LENGTH                          0x8A39
+#define GL_UNIFORM_BLOCK_INDEX                          0x8A3A
+#define GL_UNIFORM_OFFSET                               0x8A3B
+#define GL_UNIFORM_ARRAY_STRIDE                         0x8A3C
+#define GL_UNIFORM_MATRIX_STRIDE                        0x8A3D
+#define GL_UNIFORM_IS_ROW_MAJOR                         0x8A3E
+#define GL_UNIFORM_BLOCK_BINDING                        0x8A3F
+#define GL_UNIFORM_BLOCK_DATA_SIZE                      0x8A40
+#define GL_UNIFORM_BLOCK_NAME_LENGTH                    0x8A41
+#define GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS                0x8A42
+#define GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES         0x8A43
+#define GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER    0x8A44
+#define GL_UNIFORM_BLOCK_REFERENCED_BY_GEOMETRY_SHADER  0x8A45
+#define GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER  0x8A46
+#define GL_INVALID_INDEX                                0xFFFFFFFFu
+#endif
+
 /* ARB_multitexture prototypes */
 typedef void (APIENTRYP PFNGLACTIVETEXTUREARBPROC) (GLenum texture);
 PFNGLACTIVETEXTUREARBPROC p_glActiveTexture = NULL;
@@ -1086,6 +1141,23 @@ static void checkGLExtensions()
     } else {
         gHaveBindableUniform = 0;
         gUseBindableUniform = 0;
+    }
+
+    /* Grab uniform buffer object pointers */
+    if (HAVE_EXTENSION("GL_ARB_uniform_buffer_object")) {
+        gHaveUniformBufferObject = 1;
+        GET_PROC_ADDRESS(p_glGetUniformIndices, glGetUniformIndices);
+        GET_PROC_ADDRESS(p_glGetActiveUniformsiv, glGetActiveUniformsiv);
+        GET_PROC_ADDRESS(p_glGetActiveUniformName, glGetActiveUniformName);
+        GET_PROC_ADDRESS(p_glGetUniformBlockIndex, glGetUniformBlockIndex);
+        GET_PROC_ADDRESS(p_glGetActiveUniformBlockiv, glGetActiveUniformBlockiv);
+        GET_PROC_ADDRESS(p_glGetActiveUniformBlockName, glGetActiveUniformBlockName);
+        GET_PROC_ADDRESS(p_glUniformBlockBinding, glUniformBlockBinding);
+        GET_PROC_ADDRESS(p_glBindBufferRange, glBindBufferRange);
+        GET_PROC_ADDRESS(p_glBindBufferBase, glBindBufferBase);
+    } else {
+        gHaveUniformBufferObject = 0;
+        gUseUniformBufferObject = 0;
     }
 
     /* Grab VAO extension pointers */

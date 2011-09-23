@@ -81,6 +81,8 @@ extern int gIgnoreKeyboard;
 extern int gUseGLSL;
 extern int gHaveBindableUniform;
 extern int gUseBindableUniform;
+extern int gHaveUniformBufferObject;
+extern int gUseUniformBufferObject;
 extern int gBindableUpdateMethod;
 extern int gHaveVAO;
 extern int gUseVAO;

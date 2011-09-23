@@ -200,6 +200,7 @@ PFNWGLSWAPINTERVALEXTPROC p_wglSwapIntervalEXT = NULL;
 
 #define CHECK_GL_ERROR do { GLint err = glGetError(); if (err != GL_NO_ERROR) fprintf(stderr, "GL Error: %x line: %d\n", err, __LINE__ ); } while (0);
 
+#define BUFFER_USAGE_FLAG GL_STATIC_DRAW
 
 /* OpenGL Globals */
 int     gHaveVAO = 0;
@@ -512,7 +513,7 @@ static void utilCreateBindableUniformBuffer()
     p_glBufferData(GL_UNIFORM_BUFFER_EXT,
                    sizeof(gModelViewMatrixf),
                    NULL,
-                   GL_STATIC_DRAW);
+                   BUFFER_USAGE_FLAG);
 
     toggleFlushBufferRange(gBindableUpdateMethod >= BINDABLE_UPDATE_FLUSH_BUFFER_RANGE);
 
@@ -674,7 +675,7 @@ static void createVertexBuffers()
     sizeInBytes = sizeof(float)*3*NUM_VERTICES;
     p_glGenBuffers(1, &gVBO);
     p_glBindBuffer(GL_ARRAY_BUFFER, gVBO);
-    p_glBufferData(GL_ARRAY_BUFFER, sizeInBytes, NULL, GL_STATIC_DRAW);
+    p_glBufferData(GL_ARRAY_BUFFER, sizeInBytes, NULL, BUFFER_USAGE_FLAG);
     p_glBufferSubData(GL_ARRAY_BUFFER, 0, sizeInBytes, icosahedronVertices);
 
     gPositionLoc = p_glGetAttribLocation(gShader, "inPosition");
@@ -684,7 +685,7 @@ static void createVertexBuffers()
     sizeInBytes = sizeof(unsigned short)*3*NUM_INDICES;
     p_glGenBuffers(1, &gEBO);
     p_glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gEBO);
-    p_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeInBytes,NULL, GL_STATIC_DRAW);
+    p_glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeInBytes,NULL, BUFFER_USAGE_FLAG);
     p_glBufferSubData(GL_ELEMENT_ARRAY_BUFFER, 0, sizeInBytes, icosahedronIndices);
 
     if (gHaveVAO) {
@@ -711,7 +712,7 @@ static void createVertexBuffers()
     sizeInBytes = sizeof(float)*3*4;
     p_glGenBuffers(1, &gQuadVBO);
     p_glBindBuffer(GL_ARRAY_BUFFER, gQuadVBO);
-    p_glBufferData(GL_ARRAY_BUFFER, sizeInBytes*2, NULL, GL_STATIC_DRAW);
+    p_glBufferData(GL_ARRAY_BUFFER, sizeInBytes*2, NULL, BUFFER_USAGE_FLAG);
     p_glBufferSubData(GL_ARRAY_BUFFER, 0, sizeInBytes, quadVertices);
     p_glBufferSubData(GL_ARRAY_BUFFER, sizeInBytes, sizeInBytes, quadTexcoords);
 
@@ -759,7 +760,7 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                 case BINDABLE_UPDATE_GLUNIFORM_WITH_DISCARD:
                     p_glBufferData(GL_UNIFORM_BUFFER_EXT,
                                    sizeof(gModelViewMatrixf),
-                                   NULL, GL_STATIC_DRAW);
+                                   NULL, BUFFER_USAGE_FLAG);
                     /* Fall-through */
                 case BINDABLE_UPDATE_GLUNIFORM:
                     /* Just use the same glUniformMatrix command to update
@@ -771,13 +772,13 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                     /* Replace uniform buffer contents with glBufferData */
                     p_glBufferData(GL_UNIFORM_BUFFER_EXT,
                                    sizeof(gModelViewMatrixf),
-                                   params, GL_STATIC_DRAW);
+                                   params, BUFFER_USAGE_FLAG);
                     break;
 
                 case BINDABLE_UPDATE_BUFFERSUBDATA_WITH_DISCARD:
                     p_glBufferData(GL_UNIFORM_BUFFER_EXT,
                                    sizeof(gModelViewMatrixf),
-                                   NULL, GL_STATIC_DRAW);
+                                   NULL, BUFFER_USAGE_FLAG);
                     /* Fall-through */
                 case BINDABLE_UPDATE_BUFFERSUBDATA:
                     /* Update uniform buffer contents with glBufferSubData */
@@ -788,7 +789,7 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                 case BINDABLE_UPDATE_MAPBUFFER_WITH_DISCARD:
                     p_glBufferData(GL_UNIFORM_BUFFER_EXT,
                                    sizeof(gModelViewMatrixf),
-                                   NULL, GL_STATIC_DRAW);
+                                   NULL, BUFFER_USAGE_FLAG);
                     /* Fall-through */
                 case BINDABLE_UPDATE_MAPBUFFER:
                 {
@@ -805,7 +806,7 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                 case BINDABLE_UPDATE_FLUSH_BUFFER_RANGE_WITH_DISCARD:
                     p_glBufferData(GL_UNIFORM_BUFFER_EXT,
                                    sizeof(gModelViewMatrixf),
-                                   NULL, GL_STATIC_DRAW);
+                                   NULL, BUFFER_USAGE_FLAG);
                     /* Fall-through */
                 case BINDABLE_UPDATE_FLUSH_BUFFER_RANGE:
                 {

@@ -204,6 +204,7 @@ PFNWGLSWAPINTERVALEXTPROC p_wglSwapIntervalEXT = NULL;
 
 /* OpenGL Globals */
 int     gHaveVAO = 0;
+int     gHaveARBPrograms = 0;
 int     gWindowID = 0;
 int     gHaveGPUProgramParameters = 0;
 int     gHaveFlushBufferRange = 0;
@@ -236,13 +237,20 @@ GLuint  gProjMatrixUBOLoc = -1;
 GLuint  gWindowWidth;
 GLuint  gWindowHeight;
 GLuint  gWindowHasBeenResized = 0;
+char    gGLMajor = 0;
+char    gGLMinor = 0;
+char    gGLSubminor = 0;
 
 /* Shader source */
 /******************************************************************************/
 
 const GLchar* basicVertexShaderSourceBindable =
     "#extension GL_EXT_bindable_uniform : enable\n"
+    "#if __VERSION__ >= 140\n"
+    "in vec4                inPosition;\n"
+    "#else\n"
     "attribute vec4         inPosition;\n"
+    "#endif\n"
     "uniform mat4           inProjectionMatrix;\n"
     "bindable uniform mat4  inModelViewMatrix;\n"
     "void main()\n"
@@ -253,7 +261,11 @@ const GLchar* basicVertexShaderSourceBindable =
 
 const GLchar* basicVertexShaderSourceUBO =
     "#extension GL_ARB_uniform_buffer_object : enable\n"
+    "#if __VERSION__ >= 140\n"
+    "in vec4                inPosition;\n"
+    "#else\n"
     "attribute vec4         inPosition;\n"
+    "#endif\n"
     "uniform mat4           inProjectionMatrix;\n"
     "layout(std140) uniform UBO\n"
     "    { mat4 inModelViewMatrix; };\n"
@@ -264,7 +276,11 @@ const GLchar* basicVertexShaderSourceUBO =
     "}\n";
 
 const GLchar* basicVertexShaderSource =
+    "#if __VERSION__ >= 140\n"
+    "in vec4         inPosition;\n"
+    "#else\n"
     "attribute vec4  inPosition;\n"
+    "#endif\n"
     "uniform mat4    inProjectionMatrix;\n"
     "uniform mat4    inModelViewMatrix;\n"
     "void main()\n"
@@ -274,17 +290,28 @@ const GLchar* basicVertexShaderSource =
     "}\n";
 
 const GLchar* basicFragmentShaderSource =
+    "#if __VERSION__ >= 140\n"
+    "  out vec4 fragColor;\n"
+    "#else\n"
+    "  #define fragColor gl_FragColor\n"
+    "#endif\n"
     "void main()\n"
     "{\n"
-    "   gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);\n"
+    "   fragColor = vec4(0.0, 1.0, 0.0, 1.0);\n"
     /* TODO: "   gl_FragData[1] = vec4(0.0, 0.0, 1.0, 1.0);\n" */
     "}\n";
 
 /* Post processing shader */
 const GLchar* postVertexShaderSource =
+    "#if __VERSION__ >= 140\n"
+    "in vec4 inPosition;\n"
+    "in vec4 inTexCoords;\n"
+    "out vec4 texCoords;\n"
+    "#else\n"
     "attribute vec4 inPosition;\n"
     "attribute vec4 inTexCoords;\n"
     "varying vec4 texCoords;\n"
+    "#endif\n"
     "uniform mat4    inProjectionMatrix;\n"
     "uniform mat4    inModelViewMatrix;\n"
     "void main()\n"
@@ -296,13 +323,22 @@ const GLchar* postVertexShaderSource =
 const GLchar* postFragmentShaderSource =
     "uniform sampler2D tex;\n"
     "uniform sampler2D texDepth;\n"
+    "#if __VERSION__ >= 140\n"
+    "in vec4 texCoords;\n"
+    "out vec4 fragColor;\n"
+    "#else\n"
     "varying vec4 texCoords;\n"
-    "varying vec4 outColor;\n"
+    "#define fragColor gl_FragColor\n"
+    "#endif\n"
     "void main()\n"
     "{\n"
     "   vec4 texcoordsColor = vec4(texCoords.xyz, 1);\n"
-    "   gl_FragColor = mix(vec4(texture2D(tex, texCoords.xy).rgb,\n"
-    "                      1.0),texcoordsColor,0.5);\n"
+    "   #if __VERSION__ >= 140\n"
+    "     vec4 texColor = texture(tex, texCoords.xy);\n"
+    "   #else\n"
+    "     vec4 texColor = texture2D(tex, texCoords.xy);\n"
+    "   #endif\n"
+    "   fragColor = mix(vec4(texColor.rgb, 1.0), texcoordsColor, 0.5);\n"
     "}\n";
 
 
@@ -387,12 +423,27 @@ static void utilPrintInfoLog(GLenum objType, GLuint obj)
 static GLuint utilCompileShader(GLenum shaderType, const GLchar* source)
 {
     GLuint shader = p_glCreateShader(shaderType);
-    p_glShaderSource(shader, 1, &source, NULL);
+    GLchar *modified_source = malloc(strlen(source) + 60);
+
+    if (!modified_source) {
+        fprintf(stderr, "%s:%u, Out of memory!\n", __FILE__, __LINE__);
+        return 0;
+    }
+    if (gUseCoreContext) {
+        /* For core context shaders, we'll use GLSL 1.40 across the board.
+         * We can modify this later when necessary. */
+        sprintf(modified_source, "#version 140\n");
+    } else {
+        sprintf(modified_source, "#ifndef __VERSION__\n#define __VERSION__ 100\n#endif\n");
+    }
+    strcat(modified_source, source);
+
+    p_glShaderSource(shader, 1, (const GLchar**)&modified_source, NULL);
     p_glCompileShader(shader);
     GLint status;
     p_glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
     if (!status) {
-        fprintf(stderr, "shader compile error:\n%s ", source );
+        fprintf(stderr, "shader compile error:\n%s ", modified_source );
         utilPrintInfoLog(shaderType, shader);
         return 0;
     }
@@ -973,8 +1024,10 @@ static void drawScene()
 
         /* Enable GLSL and disable any ARB programs */
         p_glUseProgram(prog);
-        glDisable(GL_VERTEX_PROGRAM_ARB);
-        glDisable(GL_FRAGMENT_PROGRAM_ARB);
+        if (gHaveARBPrograms) {
+            glDisable(GL_VERTEX_PROGRAM_ARB);
+            glDisable(GL_FRAGMENT_PROGRAM_ARB);
+        }
 
         /* Upload new projection matrix */
         p_glUniformMatrix4fv(projMtxLoc, 1, GL_FALSE, gProjectionMatrixf);
@@ -1137,27 +1190,26 @@ static void* getGLProcAddress(const char *fncString)
 static void checkGLExtensions()
 {
     const char* ver = (const char*)glGetString(GL_VERSION);
-    const char* exts = (const char*)glGetString(GL_EXTENSIONS);
-    char major=0, minor=0, subminor=0;
+    const char* exts = NULL;
 
     /* Parse GL version */
     if (ver && *ver) {
         /* Skip any leading text and grab major version */
         while (!(*ver) >= '0' && *ver <= '9')
             ver++;
-        major = atoi(ver);
+        gGLMajor = atoi(ver);
         /* Grab minor version */
         while ((*ver != 0) && (*ver != ' ') && (*ver != '.'))
             ver++;
         if (*ver == '.') {
             ver++;
-            minor = atoi(ver);
+            gGLMinor = atoi(ver);
             /* Grab subminor version */
             while ((*ver != 0) && (*ver != ' ') && (*ver != '.'))
                 ver++;
             if (*ver == '.') {
                 ver++;
-                subminor = atoi(ver);
+                gGLSubminor = atoi(ver);
             }
         }
     }
@@ -1168,14 +1220,23 @@ static void checkGLExtensions()
         fprintf(stderr, "Cannot load " #x "! Bailing out!\n"); \
         killProcess(1); \
     }
+/* Shortcut for core function pointers */
+#define GET_CORE_PROC_ADDRESS(x)  GET_PROC_ADDRESS(p_##x, x)
 
+/* TODO: Support GL3 extensions via glGetStringi() */
 #define HAVE_EXTENSION(x) \
-    (strstr(exts, x) != NULL)
+    ((gUseCoreContext) ? \
+     (0) : \
+     (strstr(exts, x) != NULL))
+
+    if (!gUseCoreContext)
+        exts = (const char*)glGetString(GL_EXTENSIONS);
 
     /* Grab ARB_multitexture extension pointers */
+    printf("version: %s\n", glGetString(GL_VERSION));
     if (HAVE_EXTENSION("GL_ARB_multitexture")) {
         GET_PROC_ADDRESS(p_glActiveTexture, glActiveTextureARB);
-    } else if ((major > 1) || ((major == 1) && (minor >= 3))) {
+    } else if ((gGLMajor > 1) || ((gGLMajor == 1) && (gGLMinor >= 3))) {
         GET_PROC_ADDRESS(p_glActiveTexture, glActiveTexture);
     } else {
         fprintf(stderr, "ERROR: ARB_multitexture not supported!\n");
@@ -1183,7 +1244,22 @@ static void checkGLExtensions()
     }
 
     /* Grab ARB_shader_objects and GL 2.0 pointers */
-    if (HAVE_EXTENSION("GL_ARB_shader_objects")) {
+    if (gGLMajor >= 2) {
+        GET_CORE_PROC_ADDRESS(glAttachShader);
+        GET_CORE_PROC_ADDRESS(glCompileShader);
+        GET_CORE_PROC_ADDRESS(glCreateProgram);
+        GET_CORE_PROC_ADDRESS(glCreateShader);
+        GET_CORE_PROC_ADDRESS(glGetShaderInfoLog);
+        GET_CORE_PROC_ADDRESS(glGetShaderiv);
+        GET_CORE_PROC_ADDRESS(glShaderSource);
+        GET_CORE_PROC_ADDRESS(glGetProgramiv);
+        GET_CORE_PROC_ADDRESS(glGetProgramInfoLog);
+        GET_CORE_PROC_ADDRESS(glGetUniformLocation);
+        GET_CORE_PROC_ADDRESS(glLinkProgram);
+        GET_CORE_PROC_ADDRESS(glUseProgram);
+        GET_CORE_PROC_ADDRESS(glUniform1i);
+        GET_CORE_PROC_ADDRESS(glUniformMatrix4fv);
+    } else if (HAVE_EXTENSION("GL_ARB_shader_objects")) {
         GET_PROC_ADDRESS(p_glAttachShader, glAttachObjectARB);
         GET_PROC_ADDRESS(p_glCompileShader, glCompileShaderARB);
         GET_PROC_ADDRESS(p_glCreateProgram, glCreateProgramObjectARB);
@@ -1198,14 +1274,16 @@ static void checkGLExtensions()
         GET_PROC_ADDRESS(p_glUseProgram, glUseProgramObjectARB);
         GET_PROC_ADDRESS(p_glUniform1i, glUniform1iARB);
         GET_PROC_ADDRESS(p_glUniformMatrix4fv, glUniformMatrix4fvARB);
-
-    /* TODO: Grab 2.0 core functions if extension not present. */
     } else {
         fprintf(stderr, "ERROR: ARB_shader_objects not supported\n");
         killProcess(1);
     }
 
-    if (HAVE_EXTENSION("GL_ARB_vertex_shader")) {
+    if (gGLMajor >= 2) {
+        GET_CORE_PROC_ADDRESS(glEnableVertexAttribArray);
+        GET_CORE_PROC_ADDRESS(glGetAttribLocation);
+        GET_CORE_PROC_ADDRESS(glVertexAttribPointer);
+    } else if (HAVE_EXTENSION("GL_ARB_vertex_shader")) {
         GET_PROC_ADDRESS(p_glEnableVertexAttribArray, glEnableVertexAttribArrayARB);
         GET_PROC_ADDRESS(p_glGetAttribLocation, glGetAttribLocationARB);
         GET_PROC_ADDRESS(p_glVertexAttribPointer, glVertexAttribPointerARB);
@@ -1215,34 +1293,31 @@ static void checkGLExtensions()
         killProcess(1);
     }
 
-    if (!HAVE_EXTENSION("GL_ARB_fragment_shader")) {
+    if (gGLMajor < 2 && !HAVE_EXTENSION("GL_ARB_fragment_shader")) {
         fprintf(stderr, "ERROR: ARB_fragment_shader not supported\n");
         killProcess(1);
     }
 
     if (HAVE_EXTENSION("GL_ARB_vertex_program") &&
         HAVE_EXTENSION("GL_ARB_fragment_program")) {
+        gHaveARBPrograms = 1;
         GET_PROC_ADDRESS(p_glBindProgramARB, glBindProgramARB);
         GET_PROC_ADDRESS(p_glGenProgramsARB, glGenProgramsARB);
         GET_PROC_ADDRESS(p_glProgramLocalParameter4fvARB, glProgramLocalParameter4fvARB);
         GET_PROC_ADDRESS(p_glProgramEnvParameter4fvARB, glProgramEnvParameter4fvARB);
         GET_PROC_ADDRESS(p_glProgramStringARB, glProgramStringARB);
         GET_PROC_ADDRESS(p_glGetProgramivARB, glGetProgramivARB);
-    } else {
-        /* TODO: Make this app run w/o ARB_vp/fp support */
-        fprintf(stderr, "ERROR: ARB_vertex/fragment_program not supported\n");
-        killProcess(1);
     }
 
     /* Grab FBO extension pointers */
-    if (HAVE_EXTENSION("GL_ARB_framebuffer_object")) {
-        GET_PROC_ADDRESS(p_glBindRenderbuffer, glBindRenderbuffer);
-        GET_PROC_ADDRESS(p_glGenRenderbuffers, glGenRenderbuffers);
-        GET_PROC_ADDRESS(p_glBindFramebuffer, glBindFramebuffer);
-        GET_PROC_ADDRESS(p_glGenFramebuffers, glGenFramebuffers);
-        GET_PROC_ADDRESS(p_glCheckFramebufferStatus, glCheckFramebufferStatus);
-        GET_PROC_ADDRESS(p_glFramebufferTexture2D, glFramebufferTexture2D);
-        GET_PROC_ADDRESS(p_glFramebufferRenderbuffer, glFramebufferRenderbuffer);
+    if (gGLMajor >= 2 || HAVE_EXTENSION("GL_ARB_framebuffer_object")) {
+        GET_CORE_PROC_ADDRESS(glBindRenderbuffer);
+        GET_CORE_PROC_ADDRESS(glGenRenderbuffers);
+        GET_CORE_PROC_ADDRESS(glBindFramebuffer);
+        GET_CORE_PROC_ADDRESS(glGenFramebuffers);
+        GET_CORE_PROC_ADDRESS(glCheckFramebufferStatus);
+        GET_CORE_PROC_ADDRESS(glFramebufferTexture2D);
+        GET_CORE_PROC_ADDRESS(glFramebufferRenderbuffer);
     } else if (HAVE_EXTENSION("GL_EXT_framebuffer_object")) {
         GET_PROC_ADDRESS(p_glBindRenderbuffer, glBindRenderbufferEXT);
         GET_PROC_ADDRESS(p_glGenRenderbuffers, glGenRenderbuffersEXT);
@@ -1258,15 +1333,20 @@ static void checkGLExtensions()
     }
 
     /* Grab VBO extension pointers */
-    if (HAVE_EXTENSION("GL_ARB_vertex_buffer_object")) {
+    if ((gGLMajor > 1) || ((gGLMajor == 1) && (gGLMinor >= 5))) {
+        GET_CORE_PROC_ADDRESS(glBindBuffer);
+        GET_CORE_PROC_ADDRESS(glGenBuffers);
+        GET_CORE_PROC_ADDRESS(glBufferSubData);
+        GET_CORE_PROC_ADDRESS(glBufferData);
+        GET_CORE_PROC_ADDRESS(glMapBuffer);
+        GET_CORE_PROC_ADDRESS(glUnmapBuffer);
+    } else if (HAVE_EXTENSION("GL_ARB_vertex_buffer_object")) {
         GET_PROC_ADDRESS(p_glBindBuffer, glBindBufferARB);
         GET_PROC_ADDRESS(p_glGenBuffers, glGenBuffersARB);
         GET_PROC_ADDRESS(p_glBufferSubData, glBufferSubDataARB);
         GET_PROC_ADDRESS(p_glBufferData, glBufferDataARB);
         GET_PROC_ADDRESS(p_glMapBuffer, glMapBufferARB);
         GET_PROC_ADDRESS(p_glUnmapBuffer, glUnmapBufferARB);
-
-    /* TODO: Grab core 2.0 pointers if available w/o extension */
     } else {
         fprintf(stderr, "ERROR: VBO not supported\n");
         killProcess(1);
@@ -1284,17 +1364,18 @@ static void checkGLExtensions()
     }
 
     /* Grab uniform buffer object pointers */
-    if (HAVE_EXTENSION("GL_ARB_uniform_buffer_object")) {
+    if ((gGLMajor > 3) || ((gGLMajor == 3) && (gGLMinor >= 1)) ||
+        HAVE_EXTENSION("GL_ARB_uniform_buffer_object")) {
         gHaveUniformBufferObject = 1;
-        GET_PROC_ADDRESS(p_glGetUniformIndices, glGetUniformIndices);
-        GET_PROC_ADDRESS(p_glGetActiveUniformsiv, glGetActiveUniformsiv);
-        GET_PROC_ADDRESS(p_glGetActiveUniformName, glGetActiveUniformName);
-        GET_PROC_ADDRESS(p_glGetUniformBlockIndex, glGetUniformBlockIndex);
-        GET_PROC_ADDRESS(p_glGetActiveUniformBlockiv, glGetActiveUniformBlockiv);
-        GET_PROC_ADDRESS(p_glGetActiveUniformBlockName, glGetActiveUniformBlockName);
-        GET_PROC_ADDRESS(p_glUniformBlockBinding, glUniformBlockBinding);
-        GET_PROC_ADDRESS(p_glBindBufferRange, glBindBufferRange);
-        GET_PROC_ADDRESS(p_glBindBufferBase, glBindBufferBase);
+        GET_CORE_PROC_ADDRESS(glGetUniformIndices);
+        GET_CORE_PROC_ADDRESS(glGetActiveUniformsiv);
+        GET_CORE_PROC_ADDRESS(glGetActiveUniformName);
+        GET_CORE_PROC_ADDRESS(glGetUniformBlockIndex);
+        GET_CORE_PROC_ADDRESS(glGetActiveUniformBlockiv);
+        GET_CORE_PROC_ADDRESS(glGetActiveUniformBlockName);
+        GET_CORE_PROC_ADDRESS(glUniformBlockBinding);
+        GET_CORE_PROC_ADDRESS(glBindBufferRange);
+        GET_CORE_PROC_ADDRESS(glBindBufferBase);
     } else {
         gHaveUniformBufferObject = 0;
         gUseUniformBufferObject = 0;
@@ -1308,9 +1389,9 @@ static void checkGLExtensions()
     }
 
     /* Grab VAO extension pointers */
-    if (HAVE_EXTENSION("GL_ARB_vertex_array_object")) {
-        GET_PROC_ADDRESS(p_glGenVertexArrays, glGenVertexArrays);
-        GET_PROC_ADDRESS(p_glBindVertexArray, glBindVertexArray);
+    if ((gGLMajor >= 3) || HAVE_EXTENSION("GL_ARB_vertex_array_object")) {
+        GET_CORE_PROC_ADDRESS(glGenVertexArrays);
+        GET_CORE_PROC_ADDRESS(glBindVertexArray);
         gHaveVAO = 1;
     } else if (HAVE_EXTENSION("GL_APPLE_vertex_array_object")) {
         GET_PROC_ADDRESS(p_glGenVertexArrays, glGenVertexArraysAPPLE);
@@ -1347,6 +1428,7 @@ static void checkGLExtensions()
 #endif
 
 #undef GET_PROC_ADDRESS
+#undef GET_CORE_PROC_ADDRESS
 }
 
 void toggleFlushBufferRange(int enable)
@@ -1394,8 +1476,11 @@ void initOpenGLStates()
     createDummyTex();
     createFBO();
     createShaders();
-    createARBPrograms();
+    if (gHaveARBPrograms)
+        createARBPrograms();
     createVertexBuffers();
+
+    CHECK_GL_ERROR;
 
     gWindowWidth = DEFAULT_WINDOW_WIDTH;
     gWindowHeight = DEFAULT_WINDOW_HEIGHT;
@@ -1408,8 +1493,13 @@ void initOpenGLStates()
     glEnable(GL_CULL_FACE);
     glFrontFace(GL_CW);
     glDisable(GL_DITHER);
-    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
-    glHint(GL_CLIP_VOLUME_CLIPPING_HINT_EXT, GL_FASTEST);
+
+    if (gGLMajor < 3) {
+        /* Deprecated states */
+        glHint(GL_CLIP_VOLUME_CLIPPING_HINT_EXT, GL_FASTEST);
+        glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+    }
+    CHECK_GL_ERROR;
 }
 
 void initOpenGL(int argc, char **argv)

@@ -93,6 +93,7 @@ extern int gResetConstants;
 extern int gNumDrawCalls;
 extern int gNumFrames;
 extern int gUseMultiThreadedGL;
+extern int gUseCoreContext;
 
 /* perftest.c */
 int handleKeyPress(unsigned char key);

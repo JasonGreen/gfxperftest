@@ -36,6 +36,7 @@ int     gResetConstants = 0;
 int     gNumDrawCalls = 5000;
 int     gNumFrames = 5000;
 int     gUseMultiThreadedGL = 0;
+int     gUseCoreContext = 0;
 double  gProjectionMatrix[16];
 float   gProjectionMatrixf[16];
 float   gOrthoProjectionMatrixf[16];
@@ -331,6 +332,7 @@ static void displayHelp()
     printf("  -reset_vertex_pointers=[0,1] 1 = Reset vertex pointers before each draw call (P)\n");
     printf("  -num_draw_calls_per_frame=[]     Defaults to 5000 ('+' or '-')\n");
     printf("  -num_frames=[]                   Number of frames to draw, defaults to 5000\n");
+    printf("  -use_core_context=[0,1]          1 = Use core GL 3.2 context (Mac only)\n");
     printf("\nTo toggle an option at runtime, run with no parameters, and press the key in\n");
     printf("parentheses at the end of the option description (not all are available).\n");
     printf("\nPress 'Q' to quit.\n\n");
@@ -380,7 +382,7 @@ int handleKeyPress(unsigned char key)
             TOGGLE_OPTION(gResetConstants)
         case 'g':
         case 'G':
-            if (!gUseD3D9)
+            if (!gUseD3D9 && !gUseCoreContext)
                 TOGGLE_OPTION(gUseGLSL)
             break;
         case 'm':
@@ -410,7 +412,7 @@ int handleKeyPress(unsigned char key)
             TOGGLE_OPTION(gResetVertexPointers)
         case 'v':
         case 'V':
-            if (!gUseD3D9 && gHaveVAO)
+            if (!gUseD3D9 && gHaveVAO && !gUseCoreContext)
                 TOGGLE_OPTION(gUseVAO)
             break;
         case '+':
@@ -467,10 +469,17 @@ static void parseCommandLineOptions(int argc, char** argv)
         parseIntArgument(argv[i], "num_draw_calls_per_frame", &gNumDrawCalls);
         parseIntArgument(argv[i], "num_frames", &gNumFrames);
         parseIntArgument(argv[i], "ignore_keyboard", &gIgnoreKeyboard);
+        parseIntArgument(argv[i], "use_core_context", &gUseCoreContext);
 
         /* The UBO and BU options are mutually exclusive */
         if (gUseBindableUniform)
             gUseUniformBufferObject = 0;
+
+        /* If we're using a core GL context, we have to use GLSL and VAO */
+        if (gUseCoreContext) {
+            gUseGLSL = 1;
+            gUseVAO = 1;
+        }
 
         /* If none of the valid options were found, display Help and quit */
         if (!gCommandLineOptionsValid) {

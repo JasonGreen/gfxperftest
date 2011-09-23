@@ -77,7 +77,7 @@ static void loop_callback(CFRunLoopObserverRef observer, CFRunLoopActivity activ
     ];
     [window setTitle: @"gfxperftest"];
 
-    NSOpenGLPixelFormatAttribute attr[6];
+    NSOpenGLPixelFormatAttribute attr[8];
     unsigned int i = 0;
 
     attr[i++] = NSOpenGLPFADoubleBuffer;
@@ -85,6 +85,16 @@ static void loop_callback(CFRunLoopObserverRef observer, CFRunLoopActivity activ
     attr[i++] = NSOpenGLPFANoRecovery;
     attr[i++] = NSOpenGLPFADepthSize;
     attr[i++] = 24;
+
+#ifndef AVAILABLE_MAC_OS_X_VERSION_10_7_AND_LATER
+  #define NSOpenGLPFAOpenGLProfile          99
+  #define NSOpenGLProfileVersion3_2Core 0x3200
+#endif
+    if (gUseCoreContext) {
+        attr[i++] = NSOpenGLPFAOpenGLProfile;
+        attr[i++] = NSOpenGLProfileVersion3_2Core;
+    }
+
     attr[i++] = 0;
 
     NSOpenGLPixelFormat* format = [[NSOpenGLPixelFormat alloc] initWithAttributes:attr];

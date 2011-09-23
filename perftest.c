@@ -224,13 +224,8 @@ static inline const char* utilBindableString(int val)
 static inline const char* utilUBOString(int val)
 {
     switch (val) {
-        case UBO_UPDATE_BUFFERDATA:                 return "BUFFERDATA";
         case UBO_UPDATE_BUFFERSUBDATA:              return "BUFFERSUBDATA";
-        case UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD: return "BUFFERSUBDATA_WITH_DISCARD";
-        case UBO_UPDATE_MAPBUFFER:                  return "MAPBUFFER";
-        case UBO_UPDATE_MAPBUFFER_WITH_DISCARD:     return "MAPBUFFER_WITH_DISCARD";
         case UBO_UPDATE_MAPBUFFER_RANGE:            return "MAPBUFFER_RANGE";
-        case UBO_UPDATE_MAPBUFFER_RANGE_WITH_DISCARD: return "MAPBUFFER_RANGE_WITH_DISCARD";
         default:
         return "ERROR";
     }

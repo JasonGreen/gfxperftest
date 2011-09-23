@@ -16,6 +16,14 @@ typedef long GLintptr;
 typedef long GLsizeiptr;
 #endif
 
+#ifndef max
+#define max( a, b ) ( ((a) > (b)) ? (a) : (b) )
+#endif
+
+#ifndef min
+#define min( a, b ) ( ((a) < (b)) ? (a) : (b) )
+#endif
+
 /* VAO function prototypes */
 typedef void (APIENTRYP PFNGLBINDVERTEXARRAYPROC) (GLuint array);
 typedef void (APIENTRYP PFNGLGENVERTEXARRAYSPROC) (GLsizei n, GLuint *arrays);
@@ -209,6 +217,8 @@ PFNGLPROGRAMENVPARAMETERS4FVEXTPROC p_glProgramLocalParameters4fvEXT = NULL;
 
 
 #define BUFFER_USAGE_FLAG GL_STATIC_DRAW
+#define UBO_USAGE_FLAG    GL_STREAM_DRAW
+
 
 /* OpenGL Globals */
 int     gHaveVAO = 0;
@@ -220,6 +230,10 @@ GLuint  gVBO;
 GLuint  gEBO;
 GLuint  gBindableBuffer = 0;
 GLuint  gUBOBuffer = 0;
+GLuint  gUBOSize = 0;
+GLint   gUBOOffset = 0;
+GLint   gUBOOffsetIncrement = 0;
+GLuint  gUBOBlockIndex = 0;
 GLuint  gVAO;
 GLuint  gVAO2;
 GLuint  gFBO;
@@ -608,10 +622,12 @@ static void utilCreateBindableUniformBuffer()
     p_glBufferSubData(GL_UNIFORM_BUFFER_EXT, 0, sizeof(gModelViewMatrixf), gModelViewMatrixf);
 }
 
-/* Create the buffer object for ARB_uniform_buffer_object */
+/* Create the buffer object for ARB_uniform_buffer_object.
+ * Create the buffer with size gUBOSize and update it using a ring-buffer
+ * approach. */
 static void utilCreateUniformBufferObject()
 {
-    GLint blockSize, matSize, offset;
+    GLint alignSize, blockSize, matSize, offset;
     GLuint index;
     /* WTF? */
 #ifdef __APPLE__
@@ -622,20 +638,21 @@ static void utilCreateUniformBufferObject()
 
     /* Sanity checks - make sure the offset is 0, the blocksize is the size of
      * the modelview matrix, and the matrix size is 1 element. */
-    GLuint blockIndex = p_glGetUniformBlockIndex(gShaderUBO, "UBO");
-    p_glGetActiveUniformBlockiv(gShaderUBO, blockIndex,
+    gUBOBlockIndex = p_glGetUniformBlockIndex(gShaderUBO, "UBO");
+    p_glGetActiveUniformBlockiv(gShaderUBO, gUBOBlockIndex,
                                 GL_UNIFORM_BLOCK_DATA_SIZE, &blockSize);
     p_glGetUniformIndices(gShaderUBO, 1, &varName, &index);
     p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_OFFSET, &offset);
     p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_SIZE, &matSize);
+    glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &alignSize);
+    CHECK_GL_ERROR;
 
     if ((blockSize != sizeof(gModelViewMatrixf)) ||
         (matSize != 1) ||
         (offset != 0)) {
         fprintf(stderr, "UBO sanity checks fail: blockSize=%d, matSize=%d,"
-                        "blockIndex=%d, index=%d, offset=%d, matrix size: %zd\n",
-                blockSize, matSize, blockIndex, index, offset,
-                sizeof(gModelViewMatrixf));
+                        "gUBOBlockIndex=%d, index=%d, offset=%d\n",
+                blockSize, matSize, gUBOBlockIndex, index, offset);
         gHaveUniformBufferObject = 0;
         gUseUniformBufferObject = 0;
         return;
@@ -652,19 +669,23 @@ static void utilCreateUniformBufferObject()
 
     /* NOTE: GL_UNIFORM_BUFFER is not the same as GL_UNIFORM_BUFFER_EXT! */
     p_glBindBuffer(GL_UNIFORM_BUFFER, gUBOBuffer);
-    /* Allocate our buffer space */
-    p_glBufferData(GL_UNIFORM_BUFFER,
-                   sizeof(gModelViewMatrixf),
-                   NULL,
-                   BUFFER_USAGE_FLAG);
 
-    /* Bind the buffer to UBO binding point 0, */
-    p_glBindBufferBase(GL_UNIFORM_BUFFER, 0, gUBOBuffer);
-    /* then associate our uniform block to the same binding point. */
-    p_glUniformBlockBinding(gShaderUBO, blockIndex, 0);
+    /* Allocate our buffer space as 500 * the minimum alignment/block size */
+    gUBOOffsetIncrement = max(alignSize, sizeof(gModelViewMatrixf));
+    gUBOSize = gUBOOffsetIncrement * 500;
+
+    p_glBufferData(GL_UNIFORM_BUFFER,
+                   gUBOSize,
+                   NULL,
+                   UBO_USAGE_FLAG);
 
     /* Upload the initial data */
     p_glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(gModelViewMatrixf), gModelViewMatrixf);
+
+    /* Bind the buffer to the UBO block index. */
+    p_glBindBufferRange(GL_UNIFORM_BUFFER, gUBOBlockIndex, gUBOBuffer, 0, sizeof(gModelViewMatrixf));
+
+    CHECK_GL_ERROR;
 }
 
 static void createShaders()
@@ -992,60 +1013,36 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
         /* Using ARB_uniform_buffer_object */
         } else if (gUseUniformBufferObject) {
 
-            GLbitfield access = 0;
-            /* TODO: Add other update mechanisms here for profiling:
-             *  - Ring buffer approach using multiple buffer objects
-             */
+            GLbitfield access = (GL_MAP_WRITE_BIT |
+                                 GL_MAP_FLUSH_EXPLICIT_BIT |
+                                 GL_MAP_UNSYNCHRONIZED_BIT);
+
+            /* Start the ring buffer over at 0. */
+            if (gUBOOffset >= gUBOSize) {
+                /* Orphan and invalidate the previous buffer contents */
+                p_glBufferData(GL_UNIFORM_BUFFER,
+                               gUBOSize,
+                               NULL, UBO_USAGE_FLAG);
+                access |= GL_MAP_INVALIDATE_BUFFER_BIT;
+                gUBOOffset = 0;
+            }
+
             switch (gUBOUpdateMethod) {
 
-                case UBO_UPDATE_BUFFERDATA:
-                    /* Replace uniform buffer contents with glBufferData */
-                    p_glBufferData(GL_UNIFORM_BUFFER,
-                                   sizeof(gModelViewMatrixf),
-                                   params, BUFFER_USAGE_FLAG);
-                    break;
-
-                case UBO_UPDATE_BUFFERSUBDATA_WITH_DISCARD:
-                    p_glBufferData(GL_UNIFORM_BUFFER,
-                                   sizeof(gModelViewMatrixf),
-                                   NULL, BUFFER_USAGE_FLAG);
-                    /* Fall-through */
                 case UBO_UPDATE_BUFFERSUBDATA:
                     /* Update uniform buffer contents with glBufferSubData */
-                    p_glBufferSubData(GL_UNIFORM_BUFFER,
-                                      0, sizeof(gModelViewMatrixf), params);
+                    p_glBufferSubData(GL_UNIFORM_BUFFER, gUBOOffset,
+                                      sizeof(gModelViewMatrixf), params);
                     break;
-
-                case UBO_UPDATE_MAPBUFFER_WITH_DISCARD:
-                    p_glBufferData(GL_UNIFORM_BUFFER,
-                                   sizeof(gModelViewMatrixf),
-                                   NULL, BUFFER_USAGE_FLAG);
-                    /* Fall-through */
-                case UBO_UPDATE_MAPBUFFER:
-                {
-                    /* Update uniform buffer contents with glMapBuffer */
-                    void * ptr = p_glMapBuffer(GL_UNIFORM_BUFFER,
-                                               GL_WRITE_ONLY);
-                    if (ptr) {
-                        memcpy(ptr, params, sizeof(gModelViewMatrixf));
-                        p_glUnmapBuffer(GL_UNIFORM_BUFFER);
-                    } else
-                        fprintf(stderr, "ERROR: Unable to map buffer!\n");
-                    break;
-                }
-                case UBO_UPDATE_MAPBUFFER_RANGE_WITH_DISCARD:
-                    access |= GL_MAP_INVALIDATE_BUFFER_BIT;
-                    /* Fall-through */
                 case UBO_UPDATE_MAPBUFFER_RANGE:
                 {
-                    access |= (GL_MAP_WRITE_BIT | GL_MAP_FLUSH_EXPLICIT_BIT);
                     /* Update uniform buffer contents with glMapBufferRange */
-                    void * ptr = p_glMapBufferRange(GL_UNIFORM_BUFFER, 0,
+                    void * ptr = p_glMapBufferRange(GL_UNIFORM_BUFFER, gUBOOffset,
                                                     sizeof(gModelViewMatrixf),
                                                     access);
                     if (ptr) {
                         memcpy(ptr, params, sizeof(gModelViewMatrixf));
-                        p_glFlushMappedBufferRange(GL_UNIFORM_BUFFER, 0,
+                        p_glFlushMappedBufferRange(GL_UNIFORM_BUFFER, gUBOOffset,
                                                    sizeof(gModelViewMatrixf));
                         p_glUnmapBuffer(GL_UNIFORM_BUFFER);
                     } else
@@ -1057,6 +1054,12 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                             gBindableUpdateMethod);
                     break;
             }
+
+            /* Bind the new starting UBO offset location */
+            p_glBindBufferRange(GL_UNIFORM_BUFFER, gUBOBlockIndex,
+                                gUBOBuffer, gUBOOffset,
+                                sizeof(gModelViewMatrixf));
+            gUBOOffset += gUBOOffsetIncrement;
 
         /* Just using regular glUniform commands */
         } else {

@@ -15,6 +15,7 @@
 
 #elif defined(linux)
 #include <GL/glut.h>
+#include <GL/glx.h>
 
 #elif defined(__APPLE__)
 #include <CoreFoundation/CoreFoundation.h>

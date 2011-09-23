@@ -10,6 +10,11 @@
 */
 #include "perftest.h"
 
+#ifdef __MINGW32__
+/* Not all versions of MinGW define GLintptr yet */
+typedef long GLintptr;
+typedef long GLsizeiptr;
+#endif
 
 /* VAO function prototypes */
 typedef void (APIENTRYP PFNGLBINDVERTEXARRAYPROC) (GLuint array);
@@ -34,7 +39,7 @@ PFNGLUNMAPBUFFERARBPROC p_glUnmapBuffer = NULL;
 /* EXT_bindable_uniform */
 typedef void (APIENTRY * PFNGLUNIFORMBUFFEREXTPROC) (GLuint program, GLint location, GLuint buffer);
 typedef GLint (APIENTRY * PFNGLGETUNIFORMBUFFERSIZEEXTPROC) (GLuint program, GLint location);
-typedef GLint * (APIENTRY * PFNGLGETUNIFORMOFFSETEXTPROC) (GLuint program, GLint location);
+typedef GLintptr (APIENTRY * PFNGLGETUNIFORMOFFSETEXTPROC) (GLuint program, GLint location);
 PFNGLUNIFORMBUFFEREXTPROC p_glUniformBufferEXT = NULL;
 PFNGLGETUNIFORMBUFFERSIZEEXTPROC p_glGetUniformBufferSizeEXT = NULL;
 PFNGLGETUNIFORMOFFSETEXTPROC p_glGetUniformOffsetEXT = NULL;
@@ -651,10 +656,12 @@ static void createVertexBuffers()
                             BUFFER_OFFSET(48));
     p_glEnableVertexAttribArray(texcoordLoc);
 
-    GLuint texLoc  = p_glGetAttribLocation(gPostShader, "tex");
+    p_glUseProgram(gPostShader);
+
+    GLuint texLoc  = p_glGetUniformLocation(gPostShader, "tex");
     p_glUniform1i(texLoc, 0);
 
-    GLuint texLoc2  = p_glGetAttribLocation(gPostShader, "texDepth");
+    GLuint texLoc2  = p_glGetUniformLocation(gPostShader, "texDepth");
     p_glUniform1i(texLoc2, 1);
 
     p_glActiveTexture(GL_TEXTURE0);
@@ -662,6 +669,8 @@ static void createVertexBuffers()
 
     if (gHaveVAO)
         p_glBindVertexArray(0);
+
+    p_glUseProgram(0);
 }
 
 /******************************************************************************/
@@ -926,7 +935,7 @@ static void* getGLProcAddress(const char *fncString)
 #elif defined(__WIN32__)
     return (void*)wglGetProcAddress(fncString);
 #elif defined(linux)
-    return (void*)glXGetProcAddressARB(fncString);
+    return (void*)glXGetProcAddressARB((const GLubyte*)fncString);
 #endif
 }
 

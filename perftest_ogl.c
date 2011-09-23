@@ -22,6 +22,16 @@ typedef void (APIENTRYP PFNGLGENVERTEXARRAYSPROC) (GLsizei n, GLuint *arrays);
 PFNGLBINDVERTEXARRAYPROC p_glBindVertexArray = NULL;
 PFNGLGENVERTEXARRAYSPROC p_glGenVertexArrays = NULL;
 
+/* APPLE_flush_buffer_range prototypes */
+typedef void (APIENTRYP PFNGLBUFFERPARAMETERIAPPLEPROC) (GLenum target, GLenum pname, GLint param);
+typedef void (APIENTRYP PFNGLFLUSHMAPPEDBUFFERRANGEAPPLEPROC) (GLenum target, GLintptr offset, GLsizeiptr size);
+PFNGLBUFFERPARAMETERIAPPLEPROC p_glBufferParameteriAPPLE = NULL;
+PFNGLFLUSHMAPPEDBUFFERRANGEAPPLEPROC p_glFlushMappedBufferRangeAPPLE = NULL;
+#ifndef GL_APPLE_flush_buffer_range
+#define GL_BUFFER_SERIALIZED_MODIFY_APPLE 0x8A12
+#define GL_BUFFER_FLUSHING_UNMAP_APPLE    0x8A13
+#endif
+
 /* ARB_vertex_buffer_object prototypes */
 typedef void (APIENTRY * PFNGLBINDBUFFERARBPROC) (GLenum target, GLuint buffer);
 typedef void (APIENTRY * PFNGLGENBUFFERSARBPROC) (GLsizei n, GLuint *buffers);
@@ -195,6 +205,7 @@ PFNWGLSWAPINTERVALEXTPROC p_wglSwapIntervalEXT = NULL;
 int     gHaveVAO = 0;
 int     gWindowID = 0;
 int     gHaveGPUProgramParameters = 0;
+int     gHaveFlushBufferRange = 0;
 GLuint  gVBO;
 GLuint  gEBO;
 GLuint  gBindableBuffer = 0;
@@ -1158,6 +1169,13 @@ static void checkGLExtensions()
     } else {
         gHaveUniformBufferObject = 0;
         gUseUniformBufferObject = 0;
+    }
+
+    /* Grab APPLE_flush_buffer_range pointers */
+    if (HAVE_EXTENSION("GL_APPLE_flush_buffer_range")) {
+        gHaveFlushBufferRange = 1;
+        GET_PROC_ADDRESS(p_glBufferParameteriAPPLE, glBufferParameteriAPPLE);
+        GET_PROC_ADDRESS(p_glFlushMappedBufferRangeAPPLE, glFlushMappedBufferRangeAPPLE);
     }
 
     /* Grab VAO extension pointers */

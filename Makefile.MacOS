@@ -1,4 +1,4 @@
-CC=gcc-4.2
+CC=gcc
 CFLAGS=-Wall -fast
 LDFLAGS=-framework OpenGL -framework GLUT -framework CoreFoundation -framework Cocoa
 

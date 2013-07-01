@@ -507,6 +507,7 @@ static void parseCommandLineOptions(int argc, char** argv)
         parseIntArgument(argv[i], "use_bindable_uniform", &gUseBindableUniform);
         parseIntArgument(argv[i], "use_ubo", &gUseUniformBufferObject);
         parseIntArgument(argv[i], "bindable_update_method", &gBindableUpdateMethod);
+        parseIntArgument(argv[i], "ubo_update_method", &gUBOUpdateMethod);
         parseIntArgument(argv[i], "use_vao", &gUseVAO);
         parseIntArgument(argv[i], "reset_constants", &gResetConstants);
         parseIntArgument(argv[i], "reset_vertex_pointers", &gResetVertexPointers);

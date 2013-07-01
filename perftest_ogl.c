@@ -289,9 +289,11 @@ const GLchar* basicVertexShaderSourceUBO =
     "#else\n"
     "attribute vec4         inPosition;\n"
     "#endif\n"
-    "uniform mat4           inProjectionMatrix;\n"
     "layout(std140) uniform UBO\n"
-    "    { mat4 inModelViewMatrix; };\n"
+    "    {\n"
+    "       mat4 inModelViewMatrix;\n"
+    "       mat4 inProjectionMatrix;\n"
+    "    };\n"
     "void main()\n"
     "{\n"
     "   gl_Position = inProjectionMatrix * inModelViewMatrix * inPosition;\n"
@@ -584,8 +586,7 @@ static void utilGetMatrixLocations(GLuint prog,
                                    GLuint *mvMatrix)
 {
     *projMatrix = p_glGetUniformLocation(prog, "inProjectionMatrix");
-    if (mvMatrix != NULL)
-        *mvMatrix = p_glGetUniformLocation(prog, "inModelViewMatrix");
+    *mvMatrix = p_glGetUniformLocation(prog, "inModelViewMatrix");
 }
 
 static void utilCreateBindableUniformBuffer()
@@ -627,13 +628,15 @@ static void utilCreateBindableUniformBuffer()
  * approach. */
 static void utilCreateUniformBufferObject()
 {
-    GLint alignSize, blockSize, matSize, offset;
+    GLint alignSize, blockSize, mvpSize, projSize, offset;
     GLuint index;
     /* WTF? */
 #ifdef __APPLE__
-    const GLchar *varName = "UBO.inModelViewMatrix";
+    const GLchar *mvpName = "UBO.inModelViewMatrix";
+    const GLchar *projName = "UBO.inProjectionMatrix";
 #else
-    const GLchar *varName = "inModelViewMatrix";
+    const GLchar *mvpName = "inModelViewMatrix";
+    const GLchar *projName = "inProjectionMatrix";
 #endif
 
     /* Sanity checks - make sure the offset is 0, the blocksize is the size of
@@ -641,18 +644,34 @@ static void utilCreateUniformBufferObject()
     gUBOBlockIndex = p_glGetUniformBlockIndex(gShaderUBO, "UBO");
     p_glGetActiveUniformBlockiv(gShaderUBO, gUBOBlockIndex,
                                 GL_UNIFORM_BLOCK_DATA_SIZE, &blockSize);
-    p_glGetUniformIndices(gShaderUBO, 1, &varName, &index);
+    p_glGetUniformIndices(gShaderUBO, 1, &mvpName, &index);
     p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_OFFSET, &offset);
-    p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_SIZE, &matSize);
+    p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_SIZE, &mvpSize);
     glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &alignSize);
     CHECK_GL_ERROR;
 
-    if ((blockSize != sizeof(gModelViewMatrixf)) ||
-        (matSize != 1) ||
+    if ((blockSize != sizeof(gModelViewMatrixf) + sizeof(gProjectionMatrixf)) ||
+        (mvpSize != 1) ||
         (offset != 0)) {
-        fprintf(stderr, "UBO sanity checks fail: blockSize=%d, matSize=%d,"
+        fprintf(stderr, "UBO sanity checks fail: blockSize=%d, mvpSize=%d, "
                         "gUBOBlockIndex=%d, index=%d, offset=%d\n",
-                blockSize, matSize, gUBOBlockIndex, index, offset);
+                blockSize, mvpSize, gUBOBlockIndex, index, offset);
+        gHaveUniformBufferObject = 0;
+        gUseUniformBufferObject = 0;
+        return;
+    }
+
+    /* Make sure projection matrix is aligned properly */
+    p_glGetUniformIndices(gShaderUBO, 1, &projName, &index);
+    p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_OFFSET, &offset);
+    p_glGetActiveUniformsiv(gShaderUBO, 1, &index, GL_UNIFORM_SIZE, &projSize);
+    CHECK_GL_ERROR;
+
+    if ((projSize != 1) ||
+        (offset != sizeof(gModelViewMatrixf))) {
+        fprintf(stderr, "UBO sanity checks fail: blockSize=%d, projSize=%d, "
+                        "gUBOBlockIndex=%d, index=%d, offset=%d\n",
+                blockSize, projSize, gUBOBlockIndex, index, offset);
         gHaveUniformBufferObject = 0;
         gUseUniformBufferObject = 0;
         return;
@@ -671,7 +690,7 @@ static void utilCreateUniformBufferObject()
     p_glBindBuffer(GL_UNIFORM_BUFFER, gUBOBuffer);
 
     /* Allocate our buffer space as 500 * the minimum alignment/block size */
-    gUBOOffsetIncrement = max(alignSize, sizeof(gModelViewMatrixf));
+    gUBOOffsetIncrement = max(alignSize, sizeof(gModelViewMatrixf) + sizeof(gProjectionMatrixf));
     gUBOSize = gUBOOffsetIncrement * 500;
 
     p_glBufferData(GL_UNIFORM_BUFFER,
@@ -681,9 +700,10 @@ static void utilCreateUniformBufferObject()
 
     /* Upload the initial data */
     p_glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(gModelViewMatrixf), gModelViewMatrixf);
+    p_glBufferSubData(GL_UNIFORM_BUFFER, sizeof(gModelViewMatrixf), sizeof(gProjectionMatrixf), gProjectionMatrixf);
 
     /* Bind the buffer to the UBO block index. */
-    p_glBindBufferRange(GL_UNIFORM_BUFFER, gUBOBlockIndex, gUBOBuffer, 0, sizeof(gModelViewMatrixf));
+    p_glBindBufferRange(GL_UNIFORM_BUFFER, gUBOBlockIndex, gUBOBuffer, 0, sizeof(gModelViewMatrixf) + sizeof(gProjectionMatrixf));
 
     CHECK_GL_ERROR;
 }
@@ -753,9 +773,6 @@ static void createShaders()
             printf("program link error from UBO shader\n");
             utilPrintInfoLog(0, gShaderUBO);
         }
-        utilGetMatrixLocations(gShaderUBO,
-                               &gProjMatrixUBOLoc,
-                               NULL);
         utilCreateUniformBufferObject();
     }
 
@@ -1033,6 +1050,8 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                     /* Update uniform buffer contents with glBufferSubData */
                     p_glBufferSubData(GL_UNIFORM_BUFFER, gUBOOffset,
                                       sizeof(gModelViewMatrixf), params);
+                    p_glBufferSubData(GL_UNIFORM_BUFFER, gUBOOffset + sizeof(gModelViewMatrixf),
+                                      sizeof(gProjectionMatrixf), gProjectionMatrixf);
                     break;
                 case UBO_UPDATE_MAPBUFFER_RANGE:
                 {
@@ -1042,8 +1061,9 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
                                                     access);
                     if (ptr) {
                         memcpy(ptr, params, sizeof(gModelViewMatrixf));
+                        memcpy(ptr + sizeof(gModelViewMatrixf), gProjectionMatrixf, sizeof(gProjectionMatrixf));
                         p_glFlushMappedBufferRange(GL_UNIFORM_BUFFER, gUBOOffset,
-                                                   sizeof(gModelViewMatrixf));
+                                                   sizeof(gModelViewMatrixf) + sizeof(gProjectionMatrixf));
                         p_glUnmapBuffer(GL_UNIFORM_BUFFER);
                     } else
                         fprintf(stderr, "ERROR: Unable to map buffer!\n");
@@ -1058,7 +1078,7 @@ static inline void update_modelview_constants(const float* params, GLuint mtxLoc
             /* Bind the new starting UBO offset location */
             p_glBindBufferRange(GL_UNIFORM_BUFFER, gUBOBlockIndex,
                                 gUBOBuffer, gUBOOffset,
-                                sizeof(gModelViewMatrixf));
+                                sizeof(gModelViewMatrixf) + sizeof(gProjectionMatrixf));
             gUBOOffset += gUBOOffsetIncrement;
 
         /* Just using regular glUniform commands */

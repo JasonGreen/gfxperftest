@@ -76,6 +76,7 @@ static void loop_callback(CFRunLoopObserverRef observer, CFRunLoopActivity activ
         defer:               NO
     ];
     [window setTitle: @"gfxperftest"];
+    [window center];
 
     NSOpenGLPixelFormatAttribute attr[8];
     unsigned int i = 0;
@@ -113,8 +114,10 @@ static void loop_callback(CFRunLoopObserverRef observer, CFRunLoopActivity activ
 
     initOpenGLStates();
 
+    [NSApp activateIgnoringOtherApps:YES];
+
+    [window makeKeyAndOrderFront:nil];
     [window makeFirstResponder:window];
-    [window makeKeyAndOrderFront:window];
     [format release];
 }
 
